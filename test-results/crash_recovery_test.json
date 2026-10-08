@@ -1,0 +1,123 @@
+{
+  "scan_id": "deals-crash-20261008193937",
+  "tenant": "org-hubspot-crash",
+  "checkpoint_before_crash": {
+    "id": 7,
+    "job_id": "deals-crash-20261008193937",
+    "createdAt": "2026-10-08T19:40:14.486303+00:00",
+    "phase": "deals_batch_committed",
+    "recordsProcessed": 1,
+    "totalEstimated": null,
+    "cursor": "40100000007",
+    "pageNumber": 1,
+    "batchSize": 1,
+    "lastProcessedId": null,
+    "lastProcessedTimestamp": null,
+    "checkpoint_data": {
+      "service": "hubspot_deals",
+      "pages_processed": 1,
+      "batches_completed": 1,
+      "batch_start_page": 0,
+      "finished": false,
+      "stop_reason": null,
+      "resumed_from_page": null,
+      "committed_at": "2026-10-08T19:40:14.475333+00:00",
+      "load_ids": [
+        "1791488412.7373734"
+      ],
+      "rate_limit": {
+        "daily_limit": "250000",
+        "daily_remaining": "249966",
+        "interval_milliseconds": "10000",
+        "interval_max": "150",
+        "interval_remaining": "148",
+        "observed_at": "2026-10-08T19:40:13.797734+00:00"
+      }
+    },
+    "progress_percentage": null
+  },
+  "restart_exit_code": 0,
+  "status_after_restart": "running",
+  "rows_loaded_before_crash": 1,
+  "detect_crashed_response": {
+    "success": true,
+    "message": "Detected 1 crashed jobs",
+    "error": null,
+    "data": {
+      "crashedJobIds": [
+        "deals-crash-20261008193937"
+      ],
+      "crashedCount": 1,
+      "timeoutMinutes": 1
+    }
+  },
+  "status_after_detection": "crashed",
+  "resume_response": {
+    "status_code": 202,
+    "body": {
+      "success": true,
+      "scanId": "deals-crash-20261008193937",
+      "message": "Job deals-crash-20261008193937 is resuming from checkpoint",
+      "data": {
+        "scanId": "deals-crash-20261008193937",
+        "previousStatus": "crashed",
+        "currentStatus": "resuming",
+        "resumedAt": "2026-10-08T19:41:28.664142+00:00",
+        "resumePoint": {
+          "page": 1,
+          "recordsProcessed": 1,
+          "phase": "deals_batch_committed",
+          "cursor": "40100000007"
+        }
+      }
+    }
+  },
+  "final_status": "completed",
+  "final_records_extracted": 5,
+  "final_rows": {
+    "n": 5,
+    "distinct_ids": 5
+  },
+  "checkpoints": [
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 1,
+      "recordsProcessed": 1,
+      "cursor": "40100000007",
+      "createdAt": "2026-10-08 19:40:14.486303+00:00"
+    },
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 2,
+      "recordsProcessed": 2,
+      "cursor": "40100000008",
+      "createdAt": "2026-10-08 19:41:32.398070+00:00"
+    },
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 3,
+      "recordsProcessed": 3,
+      "cursor": "40100000009",
+      "createdAt": "2026-10-08 19:41:34.027209+00:00"
+    },
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 4,
+      "recordsProcessed": 4,
+      "cursor": "40100000010",
+      "createdAt": "2026-10-08 19:41:35.747466+00:00"
+    },
+    {
+      "phase": "deals_completed",
+      "pageNumber": 5,
+      "recordsProcessed": 5,
+      "cursor": null,
+      "createdAt": "2026-10-08 19:41:37.250665+00:00"
+    }
+  ],
+  "status_timeline_after_resume": [
+    "resuming",
+    "running",
+    "completed"
+  ]
+}

@@ -1,0 +1,177 @@
+{
+  "scan_id": "deals-checkpoint-20261008193937",
+  "tenant": "org-hubspot-ckpt",
+  "filters": {
+    "pageSize": 1,
+    "checkpointInterval": 1
+  },
+  "first_committed_checkpoint": {
+    "id": 2,
+    "job_id": "deals-checkpoint-20261008193937",
+    "createdAt": "2026-10-08T19:39:55.367245+00:00",
+    "phase": "deals_batch_committed",
+    "recordsProcessed": 1,
+    "totalEstimated": null,
+    "cursor": "40100000007",
+    "pageNumber": 1,
+    "batchSize": 1,
+    "lastProcessedId": null,
+    "lastProcessedTimestamp": null,
+    "checkpoint_data": {
+      "service": "hubspot_deals",
+      "pages_processed": 1,
+      "batches_completed": 1,
+      "batch_start_page": 0,
+      "finished": false,
+      "stop_reason": null,
+      "resumed_from_page": null,
+      "committed_at": "2026-10-08T19:39:55.354336+00:00",
+      "load_ids": [
+        "1791488393.2033956"
+      ],
+      "rate_limit": {
+        "daily_limit": "250000",
+        "daily_remaining": "249973",
+        "interval_milliseconds": "10000",
+        "interval_max": "150",
+        "interval_remaining": "147",
+        "observed_at": "2026-10-08T19:39:54.616187+00:00"
+      }
+    },
+    "progress_percentage": null
+  },
+  "pause_response": {
+    "status_code": 200,
+    "body": {
+      "success": true,
+      "scanId": "deals-checkpoint-20261008193937",
+      "message": "Job deals-checkpoint-20261008193937 has been paused successfully",
+      "data": {
+        "scanId": "deals-checkpoint-20261008193937",
+        "previousStatus": "running",
+        "currentStatus": "paused",
+        "pausedAt": "2026-10-08T19:39:55.584353+00:00",
+        "progress": {
+          "recordsProcessed": 1,
+          "currentPage": 1,
+          "phase": "deals_batch_committed",
+          "progressPercentage": null
+        }
+      }
+    }
+  },
+  "paused_status": "paused",
+  "paused_checkpoint": {
+    "id": 3,
+    "job_id": "deals-checkpoint-20261008193937",
+    "createdAt": "2026-10-08T19:39:56.987023+00:00",
+    "phase": "deals_paused",
+    "recordsProcessed": 2,
+    "totalEstimated": null,
+    "cursor": "40100000008",
+    "pageNumber": 2,
+    "batchSize": 1,
+    "lastProcessedId": null,
+    "lastProcessedTimestamp": null,
+    "checkpoint_data": {
+      "service": "hubspot_deals",
+      "pages_processed": 2,
+      "batches_completed": 2,
+      "batch_start_page": 1,
+      "finished": false,
+      "stop_reason": "paused",
+      "resumed_from_page": null,
+      "committed_at": "2026-10-08T19:39:56.974967+00:00",
+      "load_ids": [
+        "1791488395.4929152"
+      ],
+      "rate_limit": {
+        "daily_limit": "250000",
+        "daily_remaining": "249972",
+        "interval_milliseconds": "10000",
+        "interval_max": "150",
+        "interval_remaining": "147",
+        "observed_at": "2026-10-08T19:39:56.586234+00:00"
+      }
+    },
+    "progress_percentage": null
+  },
+  "rows_loaded_while_paused": 2,
+  "results_while_paused": {
+    "status_code": 409,
+    "body": {
+      "success": false,
+      "message": "Scan not completed. Current status: paused",
+      "error": "Scan not completed. Current status: paused"
+    }
+  },
+  "resume_response": {
+    "status_code": 202,
+    "body": {
+      "success": true,
+      "scanId": "deals-checkpoint-20261008193937",
+      "message": "Job deals-checkpoint-20261008193937 is resuming from checkpoint",
+      "data": {
+        "scanId": "deals-checkpoint-20261008193937",
+        "previousStatus": "paused",
+        "currentStatus": "resuming",
+        "resumedAt": "2026-10-08T19:39:57.522798+00:00",
+        "resumePoint": {
+          "page": 2,
+          "recordsProcessed": 2,
+          "phase": "deals_paused",
+          "cursor": "40100000008"
+        }
+      }
+    }
+  },
+  "final_status": "completed",
+  "final_records_extracted": 5,
+  "final_rows": {
+    "n": 5,
+    "distinct_ids": 5
+  },
+  "checkpoints": [
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 1,
+      "recordsProcessed": 1,
+      "cursor": "40100000007",
+      "createdAt": "2026-10-08 19:39:55.367245+00:00"
+    },
+    {
+      "phase": "deals_paused",
+      "pageNumber": 2,
+      "recordsProcessed": 2,
+      "cursor": "40100000008",
+      "createdAt": "2026-10-08 19:39:56.987023+00:00"
+    },
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 3,
+      "recordsProcessed": 3,
+      "cursor": "40100000009",
+      "createdAt": "2026-10-08 19:40:00.602237+00:00"
+    },
+    {
+      "phase": "deals_batch_committed",
+      "pageNumber": 4,
+      "recordsProcessed": 4,
+      "cursor": "40100000010",
+      "createdAt": "2026-10-08 19:40:02.243826+00:00"
+    },
+    {
+      "phase": "deals_completed",
+      "pageNumber": 5,
+      "recordsProcessed": 5,
+      "cursor": null,
+      "createdAt": "2026-10-08 19:40:04.067414+00:00"
+    }
+  ],
+  "status_timeline": [
+    "paused",
+    "resuming",
+    "running",
+    "completed"
+  ]
+}

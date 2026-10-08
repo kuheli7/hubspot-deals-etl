@@ -1,0 +1,62 @@
+{
+  "scan_id": "deals-e2e-20261008193937",
+  "expected_deals": 5,
+  "records_returned": 5,
+  "per_deal": [
+    {
+      "id": "40100000006",
+      "dealname": true,
+      "present": true,
+      "amount": true,
+      "dealstage": true,
+      "dealtype": true,
+      "closedate": true,
+      "tenant": true,
+      "scan": true
+    },
+    {
+      "id": "40100000007",
+      "dealname": true,
+      "present": true,
+      "amount": true,
+      "dealstage": true,
+      "dealtype": true,
+      "closedate": true,
+      "tenant": true,
+      "scan": true
+    },
+    {
+      "id": "40100000008",
+      "dealname": true,
+      "present": true,
+      "amount": true,
+      "dealstage": true,
+      "dealtype": true,
+      "closedate": true,
+      "tenant": true,
+      "scan": true
+    },
+    {
+      "id": "40100000009",
+      "dealname": true,
+      "present": true,
+      "amount": true,
+      "dealstage": true,
+      "dealtype": true,
+      "closedate": true,
+      "tenant": true,
+      "scan": true
+    },
+    {
+      "id": "40100000010",
+      "dealname": true,
+      "present": true,
+      "amount": true,
+      "dealstage": true,
+      "dealtype": true,
+      "closedate": true,
+      "tenant": true,
+      "scan": true
+    }
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "run_id": "20261008193937",
+  "started_at": "2026-10-08T19:39:37.943843+00:00",
+  "checks": [
+    {
+      "name": "GET /health returns 200 healthy",
+      "passed": true,
+      "detail": "281.0 ms"
+    },
+    {
+      "name": "GET /api/v1/health returns healthy",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Swagger UI served at /docs/",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "OpenAPI spec lists the deal endpoints",
+      "passed": true,
+      "detail": "16 paths"
+    },
+    {
+      "name": "Access token valid with crm.objects.deals.read",
+      "passed": true,
+      "detail": "rate limit headers: {'daily_limit': '250000', 'daily_remaining': '249977', 'interval_milliseconds': '10000', 'interval_max': '150', 'interval_remaining': '148', 'observed_at': '2026-10-08T19:39:39.031758+00:00'}"
+    },
+    {
+      "name": "POST /scan/start accepted",
+      "passed": true,
+      "detail": 202
+    },
+    {
+      "name": "Scan completed",
+      "passed": true,
+      "detail": "timeline=pending -> running -> completed, 8.8s, error=None"
+    },
+    {
+      "name": "All 5 test deals extracted",
+      "passed": true,
+      "detail": "5/5 found"
+    },
+    {
+      "name": "Extracted fields match HubSpot values",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "recordsExtracted equals the number of deals in HubSpot",
+      "passed": true,
+      "detail": "HubSpot=5, recordsExtracted=5, rows=5"
+    },
+    {
+      "name": "API response time acceptable (< 120 s end-to-end)",
+      "passed": true,
+      "detail": "8.8s"
+    },
+    {
+      "name": "deals table holds one row per HubSpot deal",
+      "passed": true,
+      "detail": "5 rows for 5 deals in HubSpot"
+    },
+    {
+      "name": "All recorded test deal IDs are in the database",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No duplicate deal IDs",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "amount stored as numeric(18,2)",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "closedate stored as timestamptz",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "ETL metadata columns present",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Tenant/date/stage indexes created",
+      "passed": true,
+      "detail": [
+        "deals__dlt_id_key",
+        "deals_id_key",
+        "idx_deals_createdate",
+        "idx_deals_lastmodified",
+        "idx_deals_scan",
+        "idx_deals_tenant",
+        "idx_deals_tenant_closedate",
+        "idx_deals_tenant_stage"
+      ]
+    },
+    {
+      "name": "Scan paused mid-run with committed checkpoint cursor",
+      "passed": true,
+      "detail": "paused at page 2 with 2 rows loaded"
+    },
+    {
+      "name": "Results blocked (409) while scan is paused",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Resume accepted (202)",
+      "passed": true,
+      "detail": "Job deals-checkpoint-20261008193937 is resuming from checkpoint"
+    },
+    {
+      "name": "Resumed scan completed with all deals and no duplicates",
+      "passed": true,
+      "detail": "5 rows, 5 distinct, recordsExtracted=5"
+    },
+    {
+      "name": "Resume continued from checkpoint instead of restarting",
+      "passed": true,
+      "detail": [
+        "deals_batch_committed@1",
+        "deals_paused@2",
+        "deals_batch_committed@3",
+        "deals_batch_committed@4",
+        "deals_completed@5"
+      ]
+    },
+    {
+      "name": "Interrupted scan detected as crashed",
+      "passed": true,
+      "detail": "1 rows were committed before the container restart"
+    },
+    {
+      "name": "Crashed scan resumed from its checkpoint and completed without loss or duplicates",
+      "passed": true,
+      "detail": "5 rows, 5 distinct, recordsExtracted=5"
+    },
+    {
+      "name": "Edge case: validate invalid token -> 401",
+      "passed": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "name": "Edge case: scan with invalid token fails with clear 401 error",
+      "passed": true,
+      "detail": "HubSpot rejected the access token (401): Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview"
+    },
+    {
+      "name": "Edge case: missing token -> 400",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "Edge case: malformed JSON -> 400",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "Edge case: unsupported type -> 400",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "Edge case: SQL injection in organizationId -> 400",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "Edge case: duplicate scanId -> 409",
+      "passed": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "name": "Edge case: status of unknown scan -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "Edge case: results of unknown scan -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "Edge case: cancel unknown scan -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "Edge case: remove unknown scan -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "Edge case: cancel completed scan -> 409",
+      "passed": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "name": "Edge case: results limit above maximum -> 400",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "Service restarts cleanly and is healthy again",
+      "passed": true,
+      "detail": "10.8s"
+    },
+    {
+      "name": "Scans and results survive restart",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "hubspot_active_deals": 5,
+  "page_delay_seconds": "0",
+  "mock_latency_ms_for_checkpoint_tests": 1000,
+  "finished_at": "2026-10-08T19:41:51.394853+00:00",
+  "summary": {
+    "passed": 40,
+    "failed": 0,
+    "total": 40
+  }
+}

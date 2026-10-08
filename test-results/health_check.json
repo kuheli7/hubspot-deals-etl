@@ -1,0 +1,61 @@
+{
+  "GET /health": {
+    "status_code": 200,
+    "response_ms": 281.0,
+    "body": {
+      "checks": {
+        "database": "ok"
+      },
+      "environment": "development",
+      "service": "hubspot_deals",
+      "status": "healthy",
+      "timestamp": "2026-10-08T19:39:38.241833+00:00",
+      "version": "1.0.0"
+    }
+  },
+  "GET /api/v1/health": {
+    "status_code": 200,
+    "body": {
+      "status": "healthy",
+      "timestamp": "2026-10-08T19:39:38.635344",
+      "service": "hubspot_deals_pipeline_dev",
+      "pipeline": {
+        "pipeline_name": "hubspot_deals_extraction",
+        "destination_type": "postgres",
+        "source_type": "hubspot_deals",
+        "database_health": {
+          "healthy": true,
+          "timestamp": 1791488378.5006135,
+          "database": "hubspot_deals_data_dev",
+          "host": "postgres_dev"
+        },
+        "supports_checkpoints": true
+      }
+    }
+  },
+  "GET /docs/": {
+    "status_code": 200,
+    "content_type": "text/html; charset=utf-8"
+  },
+  "GET /api/v1/swagger.json": {
+    "status_code": 200,
+    "documented_paths": [
+      "/auth/validate",
+      "/health",
+      "/maintenance/cleanup",
+      "/maintenance/detect-crashed",
+      "/pipeline/info",
+      "/results/{scan_id}/result",
+      "/results/{scan_id}/tables",
+      "/scan/list",
+      "/scan/start",
+      "/scan/statistics",
+      "/scan/{scan_id}/cancel",
+      "/scan/{scan_id}/pause",
+      "/scan/{scan_id}/remove",
+      "/scan/{scan_id}/resume",
+      "/scan/{scan_id}/status",
+      "/stats"
+    ]
+  }
+}

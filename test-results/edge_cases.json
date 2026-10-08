@@ -1,0 +1,201 @@
+{
+  "cases": [
+    {
+      "case": "validate invalid token -> 401",
+      "expected": [
+        401
+      ],
+      "actual": 401,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "HubSpot rejected the access token (401): Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview",
+        "error": "HubSpot rejected the access token (401): Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview",
+        "data": {
+          "valid": false,
+          "has_deals_read_scope": false,
+          "status_code": 401,
+          "message": "HubSpot rejected the access token (401): Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview",
+          "rate_limit": null
+        }
+      }
+    },
+    {
+      "case": "scan with invalid token ends failed with 401 detail",
+      "passed": true,
+      "actual": "failed",
+      "error": "HubSpot rejected the access token (401): Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview"
+    },
+    {
+      "case": "missing token -> 400",
+      "expected": [
+        400
+      ],
+      "actual": 400,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Configuration validation failed: {'config': {'auth': {'accessToken': ['Access token is required']}}}",
+        "error": "Configuration validation failed: {'config': {'auth': {'accessToken': ['Access token is required']}}}",
+        "validation_errors": {
+          "config": {
+            "auth": {
+              "accessToken": "***REDACTED***"
+            }
+          }
+        }
+      }
+    },
+    {
+      "case": "malformed JSON -> 400",
+      "expected": [
+        400
+      ],
+      "actual": 400,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Request body must be a valid JSON object",
+        "error": "Request body must be a valid JSON object"
+      }
+    },
+    {
+      "case": "unsupported type -> 400",
+      "expected": [
+        400
+      ],
+      "actual": 400,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Configuration validation failed: {'config': {'type': {0: ['Must be one of: deal.']}}}",
+        "error": "Configuration validation failed: {'config': {'type': {0: ['Must be one of: deal.']}}}",
+        "validation_errors": {
+          "config": {
+            "type": {
+              "0": [
+                "Must be one of: deal."
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "case": "SQL injection in organizationId -> 400",
+      "expected": [
+        400
+      ],
+      "actual": 400,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Configuration validation failed: {'config': {'organizationId': ['Organization ID can only contain letters, numbers, underscores, and hyphens']}}",
+        "error": "Configuration validation failed: {'config': {'organizationId': ['Organization ID can only contain letters, numbers, underscores, and hyphens']}}",
+        "validation_errors": {
+          "config": {
+            "organizationId": [
+              "Organization ID can only contain letters, numbers, underscores, and hyphens"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "duplicate scanId -> 409",
+      "expected": [
+        409
+      ],
+      "actual": 409,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "A scan with ID 'deals-e2e-20261008193937' already exists",
+        "error": "A scan with ID 'deals-e2e-20261008193937' already exists"
+      }
+    },
+    {
+      "case": "status of unknown scan -> 404",
+      "expected": [
+        404
+      ],
+      "actual": 404,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "No scan found with ID: no-such-scan",
+        "error": "No scan found with ID: no-such-scan"
+      }
+    },
+    {
+      "case": "results of unknown scan -> 404",
+      "expected": [
+        404
+      ],
+      "actual": 404,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Scan not found",
+        "error": "Scan not found"
+      }
+    },
+    {
+      "case": "cancel unknown scan -> 404",
+      "expected": [
+        404
+      ],
+      "actual": 404,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Job not found",
+        "error": "Job not found"
+      }
+    },
+    {
+      "case": "remove unknown scan -> 404",
+      "expected": [
+        404
+      ],
+      "actual": 404,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "No scan found with ID: no-such-scan",
+        "error": "No scan found with ID: no-such-scan"
+      }
+    },
+    {
+      "case": "cancel completed scan -> 409",
+      "expected": [
+        409
+      ],
+      "actual": 409,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Cannot cancel job with status: completed",
+        "error": "Cannot cancel job with status: completed"
+      }
+    },
+    {
+      "case": "results limit above maximum -> 400",
+      "expected": [
+        400
+      ],
+      "actual": 400,
+      "passed": true,
+      "body": {
+        "success": false,
+        "message": "Validation error: {'limit': ['Must be greater than or equal to 1 and less than or equal to 500.']}",
+        "error": "Validation error: {'limit': ['Must be greater than or equal to 1 and less than or equal to 500.']}",
+        "validation_errors": {
+          "limit": [
+            "Must be greater than or equal to 1 and less than or equal to 500."
+          ]
+        }
+      }
+    }
+  ]
+}
