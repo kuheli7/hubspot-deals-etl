@@ -129,7 +129,10 @@ def test_full_extraction(token: str, env, expected: List[Dict], account_total: i
     scan_id = f"deals-e2e-{RUN_ID}"
     started = time.monotonic()
     response = call("POST", "/scan/start", json=scan_body(scan_id, TENANT, token))
-    check("POST /scan/start accepted", response.status_code == 202, response.status_code)
+    start_data = response.json().get("data", {}) if response.ok else {}
+    check("POST /scan/start returns 202 with the scan ID", response.status_code == 202
+          and start_data.get("scanId") == scan_id and start_data.get("status") == "pending",
+          f"HTTP {response.status_code}, data={start_data}")
 
     final, timeline = wait_for(scan_id, lambda d: d.get("status") in TERMINAL)
     duration = round(time.monotonic() - started, 2)
@@ -230,7 +233,7 @@ def test_database(env, scan_id: str, expected: List[Dict], account_total: int) -
           {"idx_deals_tenant", "idx_deals_tenant_stage", "idx_deals_tenant_closedate"} <= names, sorted(names))
 
 
-def test_checkpoint_resume(token: str, env, expected_count: int) -> None:
+def test_checkpoint_resume(token: str, env, expected_count: int) -> str:
     """Pause mid-scan, confirm committed checkpoint + partial load, resume, confirm completion"""
     scan_id = f"deals-checkpoint-{RUN_ID}"
     schema = "hubspot_deals_" + CHECKPOINT_TENANT.replace("-", "_")
@@ -285,6 +288,7 @@ def test_checkpoint_resume(token: str, env, expected_count: int) -> None:
           bool(checkpoints) and any(c["phase"] == "deals_paused" for c in checkpoints)
           and checkpoints[-1]["recordsProcessed"] == expected_count,
           [f"{c['phase']}@{c['pageNumber']}" for c in checkpoints])
+    return scan_id
 
 
 def test_crash_recovery(token: str, env, expected_count: int) -> None:
@@ -373,7 +377,72 @@ def test_edge_cases(token: str, completed_scan: str) -> None:
     case("remove unknown scan -> 404", call("DELETE", "/scan/no-such-scan/remove"), [404])
     case("cancel completed scan -> 409", call("POST", f"/scan/{completed_scan}/cancel"), [409])
     case("results limit above maximum -> 400", call("GET", f"/results/{completed_scan}/result", params={"limit": 5000}), [400])
+    case("5,000-character job ID -> 404", call("GET", f"/scan/status/{'x' * 5000}"), [404])
+    case("SQL injection in job ID -> 404", call("GET", "/scan/status/" + requests.utils.quote("' OR '1'='1", safe="")), [404])
     write_json("edge_cases.json", {"cases": cases})
+
+
+def test_concurrent_starts(token: str, expected_count: int) -> None:
+    """Guideline 7.2: identical concurrent start requests create exactly one job"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    scan_id = f"deals-concurrent-{RUN_ID}"
+    body = scan_body(scan_id, TENANT, token)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        codes = sorted(pool.map(lambda _: call("POST", "/scan/start", json=body).status_code, range(5)))
+    final, _ = wait_for(scan_id, lambda d: d.get("status") in TERMINAL)
+    listed = [s["scanId"] for s in call("GET", "/jobs/jobs", params={"organizationId": TENANT, "limit": 100})
+              .json()["data"]["scans"] if s["scanId"] == scan_id]
+    write_json("concurrency_test.json", {"scan_id": scan_id, "status_codes": codes,
+                                         "jobs_created": len(listed), "final_status": final.get("status"),
+                                         "records_extracted": final.get("recordsExtracted")})
+    check("5 concurrent identical starts create exactly one job (one 202, four 409)",
+          codes == [202, 409, 409, 409, 409] and len(listed) == 1
+          and final.get("status") == "completed" and final.get("recordsExtracted") == expected_count,
+          f"status codes {codes}, job {final.get('status')}")
+
+
+def test_guideline_paths(scan_id: str) -> None:
+    """TEST-GUIDELINES-V1 endpoint paths are served as aliases of the primary routes"""
+    pairs = {
+        f"/scan/status/{scan_id}": f"/scan/{scan_id}/status",
+        f"/scan/result/{scan_id}": f"/results/{scan_id}/result",
+        "/jobs/jobs?limit=5": "/scan/list?limit=5",
+        "/jobs/statistics": "/scan/statistics",
+    }
+    results = {}
+    for alias, primary in pairs.items():
+        a, p = call("GET", alias), call("GET", primary)
+        a_data, p_data = a.json().get("data"), p.json().get("data")
+        if isinstance(a_data, dict):
+            a_data.pop("generated_at", None)
+            p_data.pop("generated_at", None)
+        results[alias] = {"status": a.status_code, "same_as": primary, "identical": a_data == p_data}
+    write_json("guideline_paths.json", results)
+    check("Guideline paths (/scan/status, /scan/result, /jobs/jobs, /jobs/statistics) answer like the primary routes",
+          all(r["status"] == 200 and r["identical"] for r in results.values()), list(results))
+
+
+def test_remove_and_verify(env, scan_id: str, tenant: str) -> None:
+    """Guideline 4.5: remove extraction data after verification, then expect 404"""
+    schema = "hubspot_deals_" + tenant.replace("-", "_")
+    removed = call("DELETE", f"/scan/remove/{scan_id}")
+    status_after = call("GET", f"/scan/status/{scan_id}")
+    result_after = call("GET", f"/scan/result/{scan_id}")
+    conn = db_connect(env)
+    try:
+        rows = query(conn, f'SELECT count(*) AS n FROM "{schema}".deals WHERE _scan_id = %s', (scan_id,))[0]["n"]
+    finally:
+        conn.close()
+    write_json("remove_test.json", {"scan_id": scan_id, "remove": {"status_code": removed.status_code,
+                                                                   "body": removed.json()},
+                                    "status_after": status_after.status_code,
+                                    "result_after": result_after.status_code, "rows_left": rows})
+    check("DELETE /scan/remove removes the scan; status and results then return 404",
+          removed.status_code == 200 and status_after.status_code == 404
+          and result_after.status_code == 404 and rows == 0,
+          f"remove {removed.status_code}, status {status_after.status_code}, "
+          f"result {result_after.status_code}, rows left {rows}")
 
 
 def test_restart(scan_id: str) -> None:
@@ -463,15 +532,18 @@ def main() -> int:
         requests.put(f"{mock_url}/__mock/config", json={"latency_ms": args.mock_latency_ms}, timeout=10)
         report["mock_latency_ms_for_checkpoint_tests"] = args.mock_latency_ms
     try:
-        test_checkpoint_resume(token, env, account_total)
+        checkpoint_scan = test_checkpoint_resume(token, env, account_total)
         if args.crash_test:
             test_crash_recovery(token, env, account_total)
     finally:
         if args.mock_latency_ms:
             requests.put(f"{mock_url}/__mock/config", json={"latency_ms": 0}, timeout=10)
     test_edge_cases(token, scan_id)
+    test_concurrent_starts(token, account_total)
+    test_guideline_paths(scan_id)
     if args.restart_test:
         test_restart(scan_id)
+    test_remove_and_verify(env, checkpoint_scan, CHECKPOINT_TENANT)
     save_environment_snapshot()
     write_report()
     return 0 if all(c["passed"] for c in report["checks"]) else 1
