@@ -1,6 +1,6 @@
 # HubSpot Deal Properties
 
-Generated 2026-10-08 19:39 UTC from `GET /crm/v3/properties/deals` on the local HubSpot API mock (`mock_hubspot/`, modelled on HubSpot's default deal properties) by `scripts/export_deal_properties.py`.
+Generated 2026-10-08 20:10 UTC from `GET /crm/v3/properties/deals` on the local HubSpot API mock (`mock_hubspot/`, modelled on HubSpot's default deal properties) by `scripts/export_deal_properties.py`.
 
 **54 properties** (54 HubSpot-defined, 0 custom). Properties marked **extracted** are requested by default and stored as typed columns in `deals`; any other property can be added per scan with `filters.properties` and is stored as text.
 

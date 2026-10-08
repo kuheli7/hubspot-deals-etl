@@ -101,6 +101,19 @@ http://localhost:5200/docs/
 
 All endpoints below are relative to `{baseUrl}/api/v1` except `GET /health` and `GET /docs/`.
 
+### Guideline path aliases
+The paths used in the GreenTree API test guideline (TEST-GUIDELINES-V1) are served as aliases of the same endpoints and return identical responses:
+
+| Guideline path | Same as |
+|---|---|
+| `GET /api/v1/scan/status/{scanId}` | `GET /api/v1/scan/{scanId}/status` |
+| `GET /api/v1/scan/result/{scanId}` | `GET /api/v1/results/{scanId}/result` |
+| `POST /api/v1/scan/cancel/{scanId}` | `POST /api/v1/scan/{scanId}/cancel` |
+| `DELETE /api/v1/scan/remove/{scanId}` | `DELETE /api/v1/scan/{scanId}/remove` |
+| `POST /api/v1/scan/pause/{scanId}`, `POST /api/v1/scan/resume/{scanId}` | `.../{scanId}/pause`, `.../{scanId}/resume` |
+| `GET /api/v1/jobs/jobs` | `GET /api/v1/scan/list` |
+| `GET /api/v1/jobs/statistics` | `GET /api/v1/scan/statistics` |
+
 ---
 
 ## 📊 Common Response Formats
@@ -190,19 +203,28 @@ All endpoints below are relative to `{baseUrl}/api/v1` except `GET /health` and 
 Unknown fields are rejected with `400`.
 
 #### Response
+The job record is created before the response is sent, so the scan can be polled immediately.
 ```json
 {
   "success": true,
-  "message": "Scan initialization accepted and is now processing in the background."
+  "message": "Scan initialization accepted and is now processing in the background.",
+  "data": {
+    "scanId": "hubspot-deals-scan-001",
+    "organizationId": "org-12345",
+    "status": "pending",
+    "statusUrl": "/api/v1/scan/hubspot-deals-scan-001/status",
+    "resultUrl": "/api/v1/results/hubspot-deals-scan-001/result"
+  }
 }
 ```
 
 #### Status Codes
 | Code | When |
 |---|---|
-| `202` | Scan accepted |
+| `202` | Scan accepted; job created with status `pending` |
 | `400` | Body is not valid JSON, or fails validation (missing token, bad `type`, invalid IDs, ...) |
-| `409` | A scan with this `scanId` already exists |
+| `409` | A scan with this `scanId` already exists, including when identical requests arrive at the same time (only the first one is accepted) |
+| `503` | Database unavailable; no job created |
 | `500` | Unexpected server error |
 
 > An invalid or under-scoped token is accepted here (`202`); the scan's first step validates it against HubSpot and the scan ends `failed` with the HubSpot message. Use `POST /api/v1/auth/validate` to check a token synchronously.
@@ -412,7 +434,7 @@ Deletes the deal rows written by this scan (`WHERE _scan_id = scanId`), the job 
 
 ### 7. List Extractions
 
-**`GET /api/v1/scan/list?organizationId=org-12345&limit=20&offset=0`**
+**`GET /api/v1/scan/list?organizationId=org-12345&limit=20&offset=0`** (alias: `GET /api/v1/jobs/jobs`)
 
 | Query | Default | Rules |
 |---|---|---|
@@ -434,7 +456,9 @@ Deletes the deal rows written by this scan (`WHERE _scan_id = scanId`), the job 
 
 ### 8. Extraction Statistics
 
-**`GET /api/v1/scan/statistics?organizationId=org-12345`**
+**`GET /api/v1/scan/statistics?organizationId=org-12345`** (alias: `GET /api/v1/jobs/statistics`)
+
+All figures respect the `organizationId` filter. `extraction_time` is measured over completed scans (`endTime - startTime`).
 
 ```json
 {
@@ -445,6 +469,12 @@ Deletes the deal rows written by this scan (`WHERE _scan_id = scanId`), the job 
                           "failed": 1, "cancelled": 0, "crashed": 0, "resuming": 0 },
     "recent_jobs_7_days": 4,
     "total_records_extracted": 17,
+    "extraction_time": {
+      "average_seconds": 3.214,
+      "min_seconds": 1.48,
+      "max_seconds": 7.26,
+      "completed_jobs_measured": 3
+    },
     "organization_filter": null,
     "generated_at": "2026-10-08T18:38:19.237929+00:00"
   }

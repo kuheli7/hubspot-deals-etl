@@ -1,5 +1,7 @@
 # HubSpot Deals ETL
 
+[![tests](https://github.com/kuheli7/hubspot-deals-etl/actions/workflows/tests.yml/badge.svg)](https://github.com/kuheli7/hubspot-deals-etl/actions/workflows/tests.yml)
+
 A Flask-RESTX service that extracts **deals** from the HubSpot CRM API (v3) and loads them into PostgreSQL with [dlt](https://dlthub.com/). Scans run asynchronously, commit checkpoints every N pages, and can be paused, resumed, cancelled and recovered after a crash.
 
 The service structure was generated with the [Glynac-AI DLT Generator](https://github.com/Glynac-AI/Backend-Tools-and-assessment) (`hubspot-deals-config.json`) and then implemented for HubSpot deals.
@@ -88,7 +90,7 @@ With the mock, the equivalent token `pat-mock-test-account-deals` already has bo
 
 ## Testing
 ```bash
-pytest                                        # 33 unit + mock-contract tests, no network needed
+pytest                                        # 83 tests: unit, mock contract, seeded data (PostgreSQL)
 python scripts/run_extraction_test.py --restart-test --crash-test [--mock-latency-ms 1000]
 python scripts/run_mock_resilience_test.py    # mock only: volume, rate limits, outages, scopes, archived
 python scripts/export_deal_properties.py      # deal property list -> docs/deal-properties.md
@@ -112,7 +114,9 @@ python scripts/export_deal_properties.py      # deal property list -> docs/deal-
 - use a token without the deals scope
 - extract archived deals
 
-Latest results: **33/33 tests, 40/40 end-to-end checks, 9/9 resilience checks**. See [`test-results/`](test-results/README.md).
+Testing follows the GreenTree [API test guideline (TEST-GUIDELINES-V1)](https://github.com/greentreegroup/policy/blob/main/TEST-GUIDELINES-V1.md). [`docs/testing.md`](docs/testing.md) maps every guideline section (seeded data tests, real extraction tests, common assertions, edge cases, CI) to the test that covers it. The seeded-data tests use a separate, freshly created `hubspot_deals_test` database on the same PostgreSQL. GitHub Actions runs the pytest suite and a Docker build on every push.
+
+Latest results: **83/83 pytest tests, 45/45 end-to-end checks, 9/9 resilience checks**. See [`test-results/`](test-results/README.md).
 
 ## Configuration
 All settings are environment variables (see [`.env.example`](.env.example)); `docker-compose.yml` reads the HubSpot ones from `.env`.
@@ -140,15 +144,15 @@ Per-scan overrides: `filters.pageSize`, `filters.checkpointInterval`, `filters.p
 | `POST` | `/api/v1/scan/{scanId}/resume` | Resume a paused, crashed or failed scan from its checkpoint |
 | `POST` | `/api/v1/scan/{scanId}/cancel` | Cancel |
 | `DELETE` | `/api/v1/scan/{scanId}/remove` | Delete a scan and its rows |
-| `GET` | `/api/v1/scan/list` | List scans (paginated) |
-| `GET` | `/api/v1/scan/statistics` | Scan statistics |
+| `GET` | `/api/v1/scan/list` (alias `/api/v1/jobs/jobs`) | List scans (paginated, filter by tenant) |
+| `GET` | `/api/v1/scan/statistics` (alias `/api/v1/jobs/statistics`) | Scan statistics incl. average extraction time |
 | `GET` | `/api/v1/results/{scanId}/tables` | Tables of a completed scan |
 | `GET` | `/api/v1/results/{scanId}/result` | Extracted deals (paginated) |
 | `POST` | `/api/v1/auth/validate` | Check a HubSpot token |
 | `GET` | `/health` · `/api/v1/health` | Health checks |
 | `POST` | `/api/v1/maintenance/cleanup` · `/detect-crashed` | Maintenance |
 
-Full reference: [`docs/api-documentation.md`](docs/api-documentation.md).
+The guideline's paths (`/scan/status/{id}`, `/scan/result/{id}`, `/scan/cancel/{id}`, `/scan/remove/{id}`, `/jobs/jobs`, `/jobs/statistics`) are served as aliases. Full reference: [`docs/api-documentation.md`](docs/api-documentation.md).
 
 ## Documentation
 | Document | Contents |
@@ -156,6 +160,7 @@ Full reference: [`docs/api-documentation.md`](docs/api-documentation.md).
 | [`docs/api-integration.md`](docs/api-integration.md) | HubSpot CRM v3 deals endpoint, auth, query parameters, response structure, rate limits, error handling, deal properties |
 | [`docs/database-schema.md`](docs/database-schema.md) | PostgreSQL tables (`CREATE TABLE`), type mapping, ETL metadata, indexes, multi-tenant isolation |
 | [`docs/api-documentation.md`](docs/api-documentation.md) | Service REST API with request/response examples and status codes |
+| [`docs/testing.md`](docs/testing.md) | Test strategy mapped to the GreenTree API test guideline |
 | [`docs/deal-properties.md`](docs/deal-properties.md) | Deal property catalogue served by `GET /crm/v3/properties/deals` (generated) |
 | [`mock_hubspot/README.md`](mock_hubspot/README.md) | HubSpot API mock: endpoints, behaviour matched, tokens, admin endpoints |
 | [`test-results/`](test-results/) | Evidence from the test runs |
