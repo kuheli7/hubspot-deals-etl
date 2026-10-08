@@ -831,11 +831,11 @@ class JobService:
 
                 current_status = job.status
 
-                # Define statuses that cannot be resumed
+                # Define statuses that cannot be resumed. Failed scans can be
+                # resumed (e.g. after a HubSpot outage) from their last checkpoint
                 non_resumable_statuses = [
                     JobStatus.COMPLETED.value,
                     JobStatus.CANCELLED.value,
-                    JobStatus.FAILED.value,
                     JobStatus.RUNNING.value,
                     JobStatus.PENDING.value,
                     JobStatus.RESUMING.value,
@@ -852,13 +852,14 @@ class JobService:
                     )
                     return {
                         "success": False,
-                        "message": f"Cannot resume job with status: {current_status}. Only paused or crashed jobs can be resumed.",
+                        "message": f"Cannot resume job with status: {current_status}. Only paused, crashed or failed jobs can be resumed.",
                     }
 
-                # Only PAUSED and CRASHED jobs can be resumed
+                # Only PAUSED, CRASHED and FAILED jobs can be resumed
                 if current_status not in [
                     JobStatus.PAUSED.value,
                     JobStatus.CRASHED.value,
+                    JobStatus.FAILED.value,
                 ]:
                     self.logger.warning(
                         "Cannot resume job: unexpected status",
@@ -889,9 +890,11 @@ class JobService:
                         "message": "No checkpoint found to resume from",
                     }
 
-                # Update job status to resuming
+                # Update job status to resuming and clear the previous outcome
                 job.status = JobStatus.RESUMING.value
                 job.lastHeartbeat = func.now()
+                job.endTime = None
+                job.errorMessage = None
 
                 # Add resume metadata
                 resume_metadata = {
