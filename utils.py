@@ -54,9 +54,12 @@ def deep_serialize(data):
         return make_json_serializable(data)
 
 
-def build_dataset_name(organization_id: str, prefix: str = "hubspot_users") -> str:
-    """Build a dataset name from organization ID"""
-    return f"{prefix}_{organization_id.replace('-', '_')}"
+def build_dataset_name(organization_id: str, prefix: str = "hubspot_deals") -> str:
+    """
+    Build the per-tenant PostgreSQL schema name, e.g. org-12345 -> hubspot_deals_org_12345.
+    Each tenant's deals live in their own schema (see docs/database-schema.md).
+    """
+    return f"{prefix}_{organization_id.replace('-', '_')}".lower()
 
 
 def calculate_duration(start_time_str: str, end_time_str: str) -> Optional[float]:
@@ -81,7 +84,7 @@ def enhance_filters_with_metadata(filters: Dict[str, Any], scan_id: str) -> Dict
 def build_dlt_env_vars(config: Dict[str, Any]) -> Dict[str, str]:
     """Build DLT environment variables from config"""
     return {
-        'DESTINATION__POSTGRES__CREDENTIALS__DATABASE': config.get('db_name', 'hubspot_data'),
+        'DESTINATION__POSTGRES__CREDENTIALS__DATABASE': config.get('db_name', 'hubspot_deals_data'),
         'DESTINATION__POSTGRES__CREDENTIALS__USERNAME': config.get('db_user', 'postgres'),
         'DESTINATION__POSTGRES__CREDENTIALS__PASSWORD': config.get('db_password', ''),
         'DESTINATION__POSTGRES__CREDENTIALS__HOST': config.get('db_host', 'localhost'),
@@ -89,16 +92,22 @@ def build_dlt_env_vars(config: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def build_sql_queries(dataset_name: str, table_name: str, limit: int = 100, offset: int = 0) -> Dict[str, str]:
-    """Build SQL queries for data retrieval"""
+def build_sql_queries(dataset_name: str, table_name: str, limit: int = 100, offset: int = 0,
+                      filter_by_scan: bool = False) -> Dict[str, str]:
+    """
+    Build SQL queries for data retrieval. With filter_by_scan the count/data
+    queries take the scan id as a bound parameter (%s), never interpolated.
+    """
     full_table_name = f'"{dataset_name}"."{table_name}"'
+    where = 'WHERE "_scan_id" = %s' if filter_by_scan else ''
     
     return {
-        'count': f"SELECT COUNT(*) as total FROM {full_table_name}",
+        'count': f"SELECT COUNT(*) as total FROM {full_table_name} {where}",
         'data': f"""
             SELECT * FROM {full_table_name}
+            {where}
             ORDER BY "_extracted_at" DESC, "id"
-            LIMIT {limit} OFFSET {offset}
+            LIMIT {int(limit)} OFFSET {int(offset)}
         """,
         'columns_schema': f"""
             SELECT column_name 

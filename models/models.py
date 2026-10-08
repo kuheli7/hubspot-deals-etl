@@ -33,7 +33,7 @@ class Job(Base):
 
     id = Column(String(255), primary_key=True)  # This is the scanId
     organizationId = Column(String(255), nullable=False, index=True)
-    type = Column(String(50), nullable=False, default="user")  # job type
+    type = Column(String(50), nullable=False, default="deal")  # job type
     status = Column(String(50), nullable=False, default=JobStatus.PENDING.value)
     startTime = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -78,13 +78,13 @@ class Job(Base):
         # Extract required fields
         scan_id = request_config["scanId"]
         organization_id = request_config["organizationId"]
-        job_type = request_config["type"][0] if request_config.get("type") else "user"
+        job_type = request_config["type"][0] if request_config.get("type") else "deal"
 
         # Store complete configuration
         complete_config = {
             "auth": request_config.get("auth", {}),
             "filters": request_config.get("filters", {}),
-            "type": request_config.get("type", ["user"]),
+            "type": request_config.get("type", ["deal"]),
         }
 
         return cls(
@@ -111,7 +111,7 @@ class JobCheckpoint(Base):
     )
 
     # Progress tracking
-    phase = Column(String(50), nullable=False)  # e.g., 'users', 'teams', 'properties'
+    phase = Column(String(50), nullable=False)  # e.g. 'deals_batch_committed', 'deals_completed'
     recordsProcessed = Column(Integer, default=0)
     totalEstimated = Column(Integer, nullable=True)  # If known
 
@@ -208,7 +208,7 @@ class JobCheckpoint(Base):
 #     createdAt = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 #     # Progress tracking
-#     phase = Column(String(50), nullable=False)  # e.g., 'users', 'teams', 'properties'
+#     phase = Column(String(50), nullable=False)  # e.g. 'deals_batch_committed', 'deals_completed'
 #     recordsProcessed = Column(Integer, default=0)
 #     totalEstimated = Column(Integer, nullable=True)  # If known
 

@@ -2,11 +2,12 @@ from flask import Flask
 from flask_cors import CORS
 import logging
 import os
+from datetime import datetime, timezone
 
 from config import get_config
 from api.routes import create_api
 from loki_logger import configure_app_logging
-from models.database import initialize_database
+from models.database import initialize_database, check_database_health
 
 def create_app(config_name: str = None) -> Flask:
     """Application factory function"""
@@ -44,21 +45,47 @@ def create_app(config_name: str = None) -> Flask:
     # Root route
     @app.route('/')
     def index():
-        # Corrected documentation path to match the new root prefix
         return {
             "service": config.APP_TITLE,
             "version": config.APP_VERSION,
-            "documentation": config.API_DOCS_PATH, # Corrected path
-            "health": "api/v1/health",
+            "documentation": config.API_DOCS_PATH,
+            "health": "/health",
             "endpoints": {
                 "start_scan": "POST /api/v1/scan/start",
                 "scan_status": "GET /api/v1/scan/{scan_id}/status",
+                "pause_scan": "POST /api/v1/scan/{scan_id}/pause",
+                "resume_scan": "POST /api/v1/scan/{scan_id}/resume",
                 "cancel_scan": "POST /api/v1/scan/{scan_id}/cancel",
+                "remove_scan": "DELETE /api/v1/scan/{scan_id}/remove",
                 "list_scans": "GET /api/v1/scan/list",
+                "scan_statistics": "GET /api/v1/scan/statistics",
+                "result_tables": "GET /api/v1/results/{scan_id}/tables",
+                "results": "GET /api/v1/results/{scan_id}/result?tableName=deals",
+                "validate_credentials": "POST /api/v1/auth/validate",
                 "pipeline_info": "GET /api/v1/pipeline/info",
-                "cleanup": "POST /api/v1/maintenance/cleanup"
+                "cleanup": "POST /api/v1/maintenance/cleanup",
+                "detect_crashed": "POST /api/v1/maintenance/detect-crashed",
+                "service_health": "GET /api/v1/health",
+                "service_stats": "GET /api/v1/stats"
             }
         }
+
+    # Lightweight liveness/readiness probe used by Docker and load balancers
+    @app.route('/health', endpoint='liveness_health')
+    def liveness_health():
+        db_health = check_database_health()
+        healthy = bool(db_health.get('healthy'))
+        body = {
+            "status": "healthy" if healthy else "unhealthy",
+            "service": "hubspot_deals",
+            "environment": os.environ.get('FLASK_ENV', 'development'),
+            "version": config.APP_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "checks": {
+                "database": "ok" if healthy else db_health.get('error', 'unavailable')
+            }
+        }
+        return body, (200 if healthy else 503)
     
     return app
 

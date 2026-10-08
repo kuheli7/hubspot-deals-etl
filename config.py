@@ -25,7 +25,7 @@ class Config:
     # Database settings for DLT PostgreSQL destination
     DB_HOST = os.environ.get('DB_HOST', 'localhost')
     DB_PORT = int(os.environ.get('DB_PORT', 5432))
-    DB_NAME = os.environ.get('DB_NAME', 'extracted_data')
+    DB_NAME = os.environ.get('DB_NAME', 'hubspot_deals_data')
     DB_USER = os.environ.get('DB_USER', 'postgres')
     DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
     DB_SCHEMA = os.environ.get('DB_SCHEMA', 'main')
@@ -41,15 +41,25 @@ class Config:
     DLT_WORKING_DIR = os.environ.get('DLT_WORKING_DIR', '.dlt')
     DLT_RUNTIME_ENV = os.environ.get('DLT_RUNTIME_ENV', 'production')
     
-    # External API settings
-    API_BASE_URL = os.environ.get('API_BASE_URL', 'https://api.example.com')
-    API_TIMEOUT = int(os.environ.get('API_TIMEOUT', 30))
-    API_RATE_LIMIT = int(os.environ.get('API_RATE_LIMIT', 100))
-    API_USERS_ENDPOINT = os.environ.get('API_USERS_ENDPOINT', '/users')
-    API_TEAMS_ENDPOINT = os.environ.get('API_TEAMS_ENDPOINT', '/teams')
-    API_RETRY_ATTEMPTS = int(os.environ.get('API_RETRY_ATTEMPTS', 3))
-    API_RETRY_DELAY = int(os.environ.get('API_RETRY_DELAY', 1))
-    
+    # HubSpot CRM API settings (the access token is never read from the
+    # environment - it is supplied per scan request and stored encrypted)
+    HUBSPOT_API_BASE_URL = os.environ.get('HUBSPOT_API_BASE_URL', 'https://api.hubapi.com')
+    HUBSPOT_DEALS_ENDPOINT = os.environ.get('HUBSPOT_DEALS_ENDPOINT', '/crm/v3/objects/deals')
+    HUBSPOT_DEAL_PROPERTIES_ENDPOINT = os.environ.get('HUBSPOT_DEAL_PROPERTIES_ENDPOINT', '/crm/v3/properties/deals')
+    HUBSPOT_DEAL_PIPELINES_ENDPOINT = os.environ.get('HUBSPOT_DEAL_PIPELINES_ENDPOINT', '/crm/v3/pipelines/deals')
+    HUBSPOT_API_TIMEOUT = int(os.environ.get('HUBSPOT_API_TIMEOUT', 30))
+    # HubSpot burst limit: requests allowed per rolling window (150 / 10 s)
+    HUBSPOT_RATE_LIMIT_MAX_REQUESTS = int(os.environ.get('HUBSPOT_RATE_LIMIT_MAX_REQUESTS', 150))
+    HUBSPOT_RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get('HUBSPOT_RATE_LIMIT_WINDOW_SECONDS', 10))
+    HUBSPOT_RETRY_ATTEMPTS = int(os.environ.get('HUBSPOT_RETRY_ATTEMPTS', 3))
+    HUBSPOT_RETRY_BACKOFF_SECONDS = float(os.environ.get('HUBSPOT_RETRY_BACKOFF_SECONDS', 1))
+    # Deals per API page (HubSpot maximum is 100)
+    HUBSPOT_PAGE_SIZE = int(os.environ.get('HUBSPOT_PAGE_SIZE', 100))
+    # Commit a checkpoint after every N pages have been loaded
+    HUBSPOT_CHECKPOINT_INTERVAL_PAGES = int(os.environ.get('HUBSPOT_CHECKPOINT_INTERVAL_PAGES', 10))
+    # Optional pause between page requests; only used to make pause/resume testable
+    HUBSPOT_PAGE_DELAY_SECONDS = float(os.environ.get('HUBSPOT_PAGE_DELAY_SECONDS', 0))
+
     # Extraction service settings
     MAX_CONCURRENT_SCANS = int(os.environ.get('MAX_CONCURRENT_SCANS', 5))
     SCAN_TIMEOUT_HOURS = int(os.environ.get('SCAN_TIMEOUT_HOURS', 24))
@@ -105,9 +115,9 @@ class Config:
     HEALTH_CHECK_CACHE = True
     
     # API-specific settings
-    API_DOCS_PATH = '/docs'
+    API_DOCS_PATH = '/docs/'
     API_DOCS_ENABLED = True
-    API_PREFIX = '/api'
+    API_PREFIX = '/api/v1'
     
     @classmethod
     def get_database_url(cls) -> str:
@@ -145,14 +155,8 @@ class Config:
             'scan_timeout_hours': cls.SCAN_TIMEOUT_HOURS,
             'default_batch_size': cls.DEFAULT_BATCH_SIZE,
             
-            # External API configuration
-            'api_base_url': cls.API_BASE_URL,
-            'api_timeout': cls.API_TIMEOUT,
-            'api_rate_limit': cls.API_RATE_LIMIT,
-            'api_users_endpoint': cls.API_USERS_ENDPOINT,
-            'api_teams_endpoint': cls.API_TEAMS_ENDPOINT,
-            'api_retry_attempts': cls.API_RETRY_ATTEMPTS,
-            'api_retry_delay': cls.API_RETRY_DELAY,
+            # HubSpot API configuration (access token comes from each scan request)
+            **cls.get_hubspot_config(),
             
             # Cache configuration
             'cache_enabled': cls.CACHE_ENABLED,
@@ -160,6 +164,24 @@ class Config:
             'cache_timeout': cls.CACHE_DEFAULT_TIMEOUT
         }
     
+    @classmethod
+    def get_hubspot_config(cls) -> Dict[str, Any]:
+        """Get HubSpot API client settings used by the deals extraction"""
+        return {
+            'hubspot_api_base_url': cls.HUBSPOT_API_BASE_URL,
+            'hubspot_deals_endpoint': cls.HUBSPOT_DEALS_ENDPOINT,
+            'hubspot_deal_properties_endpoint': cls.HUBSPOT_DEAL_PROPERTIES_ENDPOINT,
+            'hubspot_deal_pipelines_endpoint': cls.HUBSPOT_DEAL_PIPELINES_ENDPOINT,
+            'hubspot_api_timeout': cls.HUBSPOT_API_TIMEOUT,
+            'hubspot_rate_limit_max_requests': cls.HUBSPOT_RATE_LIMIT_MAX_REQUESTS,
+            'hubspot_rate_limit_window_seconds': cls.HUBSPOT_RATE_LIMIT_WINDOW_SECONDS,
+            'hubspot_retry_attempts': cls.HUBSPOT_RETRY_ATTEMPTS,
+            'hubspot_retry_backoff_seconds': cls.HUBSPOT_RETRY_BACKOFF_SECONDS,
+            'hubspot_page_size': cls.HUBSPOT_PAGE_SIZE,
+            'hubspot_checkpoint_interval_pages': cls.HUBSPOT_CHECKPOINT_INTERVAL_PAGES,
+            'hubspot_page_delay_seconds': cls.HUBSPOT_PAGE_DELAY_SECONDS,
+        }
+
     @classmethod
     def get_dlt_config(cls) -> Dict[str, Any]:
         """Get DLT specific configuration"""
@@ -182,13 +204,12 @@ class Config:
                 'environment': cls.DLT_RUNTIME_ENV
             },
             'sources': {
-                'data_source': {
-                    'base_url': cls.API_BASE_URL,
-                    'users_endpoint': cls.API_USERS_ENDPOINT,
-                    'teams_endpoint': cls.API_TEAMS_ENDPOINT,
-                    'batch_size': cls.DEFAULT_BATCH_SIZE,
-                    'timeout': cls.API_TIMEOUT,
-                    'retry_attempts': cls.API_RETRY_ATTEMPTS
+                'hubspot_deals': {
+                    'base_url': cls.HUBSPOT_API_BASE_URL,
+                    'deals_endpoint': cls.HUBSPOT_DEALS_ENDPOINT,
+                    'page_size': cls.HUBSPOT_PAGE_SIZE,
+                    'timeout': cls.HUBSPOT_API_TIMEOUT,
+                    'retry_attempts': cls.HUBSPOT_RETRY_ATTEMPTS
                 }
             }
         }
@@ -262,16 +283,11 @@ class Config:
             'docs_path': cls.API_DOCS_PATH,
             'docs_enabled': cls.API_DOCS_ENABLED,
             'prefix': cls.API_PREFIX,
-            'api_base_url': cls.API_BASE_URL,
-            'api_timeout': cls.API_TIMEOUT,
-            'api_rate_limit': cls.API_RATE_LIMIT,
-            'users_endpoint': cls.API_USERS_ENDPOINT,
-            'teams_endpoint': cls.API_TEAMS_ENDPOINT,
-            'retry_attempts': cls.API_RETRY_ATTEMPTS,
-            'retry_delay': cls.API_RETRY_DELAY,
+            'hubspot_api_base_url': cls.HUBSPOT_API_BASE_URL,
+            'hubspot_deals_endpoint': cls.HUBSPOT_DEALS_ENDPOINT,
             "max_scan_list_limit": 100,      # Max number of scans to return per page
             "default_scan_list_limit": 20,   # Default number of scans to return per page
-            "max_results_limit": 500,        # Max number of scan results (users) per page
+            "max_results_limit": 500,        # Max number of scan results (deals) per page
             "default_results_limit": 100,    # Default number of results per page            
             # Maintenance and job detection
             "crash_detection_timeout": 10,   # Timeout in minutes to detect crashed jobs

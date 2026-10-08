@@ -11,6 +11,14 @@ from loki_logger import get_logger, log_business_event, log_security_event
 from encrypter import Encrypter
 
 
+def redact_job_auth(job_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Hide stored credentials (even encrypted) from API responses and logs"""
+    config = job_dict.get("config")
+    if isinstance(config, dict) and config.get("auth"):
+        job_dict["config"] = {**config, "auth": "***redacted***"}
+    return job_dict
+
+
 class JobService:
     """Service for managing job lifecycle and operations"""
 
@@ -36,7 +44,7 @@ class JobService:
                     "Creating job",
                     extra={
                         "operation": "create_job",
-                        "job_dict": job_dict,
+                        "job_dict": redact_job_auth(dict(job_dict)),
                     },
                 )
 
@@ -290,9 +298,11 @@ class JobService:
 
                 job.status = JobStatus.CANCELLED.value
                 job.endTime = func.now()
-                job.job_metadata = deep_serialize(
-                    {"cancelled_at": datetime.now(timezone.utc).isoformat()}
-                )
+                # Merge rather than replace so dataset_name survives and the
+                # partially loaded data can still be read or removed
+                existing_metadata = dict(job.job_metadata or {})
+                existing_metadata["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+                job.job_metadata = deep_serialize(existing_metadata)
                 db.flush()
 
                 self.logger.info(
@@ -461,7 +471,7 @@ class JobService:
                 if not job:
                     return None
 
-                result = job.to_dict()
+                result = redact_job_auth(job.to_dict())
 
                 if result.get("endTime"):
                     duration = calculate_duration(
@@ -519,7 +529,7 @@ class JobService:
 
                 result = []
                 for job in jobs:
-                    job_dict = job.to_dict()
+                    job_dict = redact_job_auth(job.to_dict())
                     if job_dict.get("endTime"):
                         duration = calculate_duration(
                             job_dict["startTime"], job_dict["endTime"]
@@ -658,10 +668,30 @@ class JobService:
     def cleanup_old_jobs(self, days_old: int = 7) -> Dict[str, Any]:
         try:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+            active = [
+                JobStatus.PENDING.value,
+                JobStatus.RUNNING.value,
+                JobStatus.PAUSED.value,
+                JobStatus.RESUMING.value,
+            ]
             with get_db_session_scope() as db:
-                deleted_count = (
-                    db.query(Job).filter(Job.startTime < cutoff_date).delete()
-                )
+                old_job_ids = [
+                    row[0]
+                    for row in db.query(Job.id)
+                    .filter(Job.startTime < cutoff_date, Job.status.notin_(active))
+                    .all()
+                ]
+                deleted_count = 0
+                if old_job_ids:
+                    # Checkpoints first: the foreign key has no ON DELETE CASCADE
+                    db.query(JobCheckpoint).filter(
+                        JobCheckpoint.job_id.in_(old_job_ids)
+                    ).delete(synchronize_session=False)
+                    deleted_count = (
+                        db.query(Job)
+                        .filter(Job.id.in_(old_job_ids))
+                        .delete(synchronize_session=False)
+                    )
 
             self.logger.info(
                 "Old jobs cleaned up",

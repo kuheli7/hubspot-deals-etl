@@ -1,6 +1,5 @@
-version: '3.8'
 
-name: Hubspot_Deals DLT Extraction Service
+name: hubspot-deals-etl
 
 services:
   # PostgreSQL database for Development
@@ -107,6 +106,7 @@ services:
       - FLASK_ENV=development
       - FLASK_DEBUG=true
       - SECRET_KEY=dev-secret-key-change-in-production
+      - CONFIG_PASSWORD=${CONFIG_PASSWORD:-dev-config-password-change-me}
       - PORT=5200
       - HOST=0.0.0.0
       
@@ -129,9 +129,15 @@ services:
       - DLT_PIPELINE_NAME=hubspot_deals_pipeline_dev
       - DLT_WORKING_DIR=/app/.dlt
       
-      # Hubspot_Deals API Configuration
-      - HUBSPOT_DEALS_API_TIMEOUT=30
-      - HUBSPOT_DEALS_API_RATE_LIMIT=100
+      # HubSpot API Configuration (access tokens come from scan requests, never env)
+      - HUBSPOT_API_BASE_URL=${HUBSPOT_API_BASE_URL:-https://api.hubapi.com}
+      - HUBSPOT_API_TIMEOUT=${HUBSPOT_API_TIMEOUT:-30}
+      - HUBSPOT_RATE_LIMIT_MAX_REQUESTS=${HUBSPOT_RATE_LIMIT_MAX_REQUESTS:-150}
+      - HUBSPOT_RATE_LIMIT_WINDOW_SECONDS=${HUBSPOT_RATE_LIMIT_WINDOW_SECONDS:-10}
+      - HUBSPOT_RETRY_ATTEMPTS=${HUBSPOT_RETRY_ATTEMPTS:-3}
+      - HUBSPOT_PAGE_SIZE=${HUBSPOT_PAGE_SIZE:-100}
+      - HUBSPOT_CHECKPOINT_INTERVAL_PAGES=${HUBSPOT_CHECKPOINT_INTERVAL_PAGES:-10}
+      - HUBSPOT_PAGE_DELAY_SECONDS=${HUBSPOT_PAGE_DELAY_SECONDS:-0}
       
       # Service Configuration
       - MAX_CONCURRENT_SCANS=3
@@ -157,7 +163,7 @@ services:
     networks:
       - hubspot_deals_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5200/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -186,6 +192,7 @@ services:
       - FLASK_ENV=staging
       - FLASK_DEBUG=false
       - SECRET_KEY=stage-secret-key-change-in-production
+      - CONFIG_PASSWORD=${CONFIG_PASSWORD:-stage-config-password-change-me}
       - PORT=5201
       - HOST=0.0.0.0
       
@@ -208,9 +215,14 @@ services:
       - DLT_PIPELINE_NAME=hubspot_deals_pipeline_stage
       - DLT_WORKING_DIR=/app/.dlt
       
-      # Hubspot_Deals API Configuration
-      - HUBSPOT_DEALS_API_TIMEOUT=45
-      - HUBSPOT_DEALS_API_RATE_LIMIT=200
+      # HubSpot API Configuration (access tokens come from scan requests, never env)
+      - HUBSPOT_API_BASE_URL=${HUBSPOT_API_BASE_URL:-https://api.hubapi.com}
+      - HUBSPOT_API_TIMEOUT=${HUBSPOT_API_TIMEOUT:-45}
+      - HUBSPOT_RATE_LIMIT_MAX_REQUESTS=${HUBSPOT_RATE_LIMIT_MAX_REQUESTS:-150}
+      - HUBSPOT_RATE_LIMIT_WINDOW_SECONDS=${HUBSPOT_RATE_LIMIT_WINDOW_SECONDS:-10}
+      - HUBSPOT_RETRY_ATTEMPTS=${HUBSPOT_RETRY_ATTEMPTS:-3}
+      - HUBSPOT_PAGE_SIZE=${HUBSPOT_PAGE_SIZE:-100}
+      - HUBSPOT_CHECKPOINT_INTERVAL_PAGES=${HUBSPOT_CHECKPOINT_INTERVAL_PAGES:-10}
       
       # Service Configuration
       - MAX_CONCURRENT_SCANS=5
@@ -234,7 +246,7 @@ services:
     networks:
       - hubspot_deals_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5201/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5201/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -265,6 +277,7 @@ services:
       - FLASK_ENV=production
       - FLASK_DEBUG=false
       - SECRET_KEY=prod-secret-key-change-in-production
+      - CONFIG_PASSWORD=${CONFIG_PASSWORD:-prod-config-password-change-me}
       - PORT=5202
       - HOST=0.0.0.0
       
@@ -287,9 +300,14 @@ services:
       - DLT_PIPELINE_NAME=hubspot_deals_pipeline_prod
       - DLT_WORKING_DIR=/app/.dlt
       
-      # Hubspot_Deals API Configuration
-      - HUBSPOT_DEALS_API_TIMEOUT=60
-      - HUBSPOT_DEALS_API_RATE_LIMIT=300
+      # HubSpot API Configuration (access tokens come from scan requests, never env)
+      - HUBSPOT_API_BASE_URL=${HUBSPOT_API_BASE_URL:-https://api.hubapi.com}
+      - HUBSPOT_API_TIMEOUT=${HUBSPOT_API_TIMEOUT:-60}
+      - HUBSPOT_RATE_LIMIT_MAX_REQUESTS=${HUBSPOT_RATE_LIMIT_MAX_REQUESTS:-150}
+      - HUBSPOT_RATE_LIMIT_WINDOW_SECONDS=${HUBSPOT_RATE_LIMIT_WINDOW_SECONDS:-10}
+      - HUBSPOT_RETRY_ATTEMPTS=${HUBSPOT_RETRY_ATTEMPTS:-3}
+      - HUBSPOT_PAGE_SIZE=${HUBSPOT_PAGE_SIZE:-100}
+      - HUBSPOT_CHECKPOINT_INTERVAL_PAGES=${HUBSPOT_CHECKPOINT_INTERVAL_PAGES:-10}
       
       # Service Configuration
       - MAX_CONCURRENT_SCANS=10
@@ -313,7 +331,7 @@ services:
     networks:
       - hubspot_deals_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5202/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5202/health"]
       interval: 30s
       timeout: 10s
       retries: 3

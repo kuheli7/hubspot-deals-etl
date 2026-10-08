@@ -46,10 +46,10 @@ class DatabaseService:
             self.logger.warning(f"Could not get columns from LIMIT 0 query: {str(e)}")
         
 
-    def execute_count_query(self, client, query: str) -> int:
-        """Execute a count query and return the result"""
+    def execute_count_query(self, client, query: str, *params) -> int:
+        """Execute a count query (optionally with bound parameters) and return the result"""
         try:
-            result = client.execute_sql(query)
+            result = client.execute_sql(query, *params)
             if hasattr(result, 'fetchone'):
                 count_row = result.fetchone()
                 return count_row[0] if count_row else 0
@@ -60,10 +60,10 @@ class DatabaseService:
             self.logger.warning(f"Error executing count query: {str(e)}")
             return 0
 
-    def execute_data_query(self, client, query: str, columns: List[str]) -> List[Dict[str, Any]]:
-        """Execute a data query and return formatted results"""
+    def execute_data_query(self, client, query: str, columns: List[str], *params) -> List[Dict[str, Any]]:
+        """Execute a data query (optionally with bound parameters) and return formatted results"""
         try:
-            result = client.execute_sql(query)
+            result = client.execute_sql(query, *params)
             
             # If we still don't have columns, try to get from result description
             if not columns:
@@ -95,9 +95,10 @@ class DatabaseService:
             self.logger.warning(f"Error getting tables: {str(e)}")
             return []
 
-    def get_scan_data(self, dataset_name: str, table_name: str = "users", 
-                      limit: int = 100, offset: int = 0) -> Dict[str, Any]:
-        """Get scan data with pagination"""
+    def get_scan_data(self, dataset_name: str, table_name: str = "deals",
+                      limit: int = 100, offset: int = 0,
+                      scan_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get scan data with pagination, limited to rows written by scan_id when given"""
         try:
             # Create a read-only pipeline connection
             pipeline = dlt.pipeline(
@@ -107,16 +108,19 @@ class DatabaseService:
             )
             
             with pipeline.sql_client() as client:
-                queries = build_sql_queries(dataset_name, table_name, limit, offset)
+                # Get column names
+                columns = self.get_table_columns(client, dataset_name, table_name) or []
+
+                filter_by_scan = bool(scan_id) and "_scan_id" in columns
+                params = (scan_id,) if filter_by_scan else ()
+                queries = build_sql_queries(dataset_name, table_name, limit, offset,
+                                            filter_by_scan=filter_by_scan)
                 
                 # Get total count
-                total_count = self.execute_count_query(client, queries['count'])
-                
-                # Get column names
-                columns = self.get_table_columns(client, dataset_name, table_name)
+                total_count = self.execute_count_query(client, queries['count'], *params)
                 
                 # Get paginated data
-                rows = self.execute_data_query(client, queries['data'], columns)
+                rows = self.execute_data_query(client, queries['data'], columns, *params)
                 
                 # Get available tables
                 available_tables = self.get_available_tables(client, dataset_name)
@@ -165,7 +169,7 @@ class DatabaseService:
         except Exception as e:
             self.logger.warning(f"Error getting table list: {str(e)}")
             return [{
-                "name": "users",
+                "name": "deals",
                 "rowCount": 0,
                 "extractedCount": 0
             }]
@@ -327,10 +331,10 @@ class DatabaseService:
                                 # Delete only records belonging to this scan_id
                                 delete_query = f"""
                                     DELETE FROM "{dataset_name}"."{table_name}" 
-                                    WHERE _scan_id = '{scan_id}'
+                                    WHERE _scan_id = %s
                                 """
                                 
-                                result = client.execute_sql(delete_query)
+                                result = client.execute_sql(delete_query, scan_id)
                                 
                                 # Try to get affected row count
                                 if hasattr(result, 'rowcount'):
@@ -339,9 +343,9 @@ class DatabaseService:
                                     # Fallback: count remaining records to estimate
                                     count_query = f"""
                                         SELECT COUNT(*) FROM "{dataset_name}"."{table_name}"
-                                        WHERE _scan_id = '{scan_id}'
+                                        WHERE _scan_id = %s
                                     """
-                                    remaining = client.execute_sql(count_query)
+                                    remaining = client.execute_sql(count_query, scan_id)
                                     deleted_count = 0 if hasattr(remaining, 'fetchone') and remaining.fetchone()[0] == 0 else 1
                                 
                                 records_removed += deleted_count
@@ -376,3 +380,38 @@ class DatabaseService:
             except Exception as e:
                 self.logger.error(f"Error removing scan data for {scan_id} from dataset {dataset_name}: {str(e)}")
                 return 0
+    # Secondary indexes for the deals table (documented in docs/database-schema.md).
+    # dlt creates the table and the unique index on "id"; these support the
+    # tenant, date and stage access patterns of downstream queries.
+    DEAL_INDEXES = {
+        "idx_deals_tenant": '("_tenant_id")',
+        "idx_deals_tenant_stage": '("_tenant_id", "pipeline", "dealstage")',
+        "idx_deals_tenant_closedate": '("_tenant_id", "closedate")',
+        "idx_deals_createdate": '("createdate")',
+        "idx_deals_lastmodified": '("hs_lastmodifieddate")',
+        "idx_deals_scan": '("_scan_id")',
+    }
+
+    def ensure_deal_indexes(self, dataset_name: str, table_name: str = "deals") -> List[str]:
+        """Create the deal indexes if missing; returns the index names that exist"""
+        created = []
+        try:
+            pipeline = dlt.pipeline(
+                pipeline_name=self.pipeline_name,
+                destination=self.destination,
+                dataset_name=dataset_name
+            )
+            with pipeline.sql_client() as client:
+                for index_name, columns in self.DEAL_INDEXES.items():
+                    try:
+                        client.execute_sql(
+                            f'CREATE INDEX IF NOT EXISTS "{index_name}" '
+                            f'ON "{dataset_name}"."{table_name}" {columns}'
+                        )
+                        created.append(index_name)
+                    except Exception as e:
+                        self.logger.warning(f"Could not create index {index_name}: {str(e)}")
+            self.logger.info(f"Deal indexes ensured on {dataset_name}.{table_name}: {created}")
+        except Exception as e:
+            self.logger.warning(f"Index creation skipped for {dataset_name}.{table_name}: {str(e)}")
+        return created
