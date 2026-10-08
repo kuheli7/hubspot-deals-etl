@@ -1,0 +1,66 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    name: Unit, contract and seeded-data tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DB_HOST: localhost
+      TEST_DB_PORT: "5432"
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: password123
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        run: pytest -o addopts="" -v -W ignore::DeprecationWarning
+
+  docker:
+    name: Docker images build and the stack starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack with the HubSpot mock
+        run: docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build --wait
+
+      - name: Health and docs respond
+        run: |
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://localhost:5200/health
+          curl --fail http://localhost:5200/docs/ -o /dev/null
+          curl --fail http://localhost:5299/__mock/health
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.mock.yml logs --tail 200
+
+      - name: Stop
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.mock.yml down -v
