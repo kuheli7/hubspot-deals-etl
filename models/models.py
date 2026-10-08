@@ -8,8 +8,8 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+
+from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 from typing import Dict, List, Optional, Any
 from enum import Enum

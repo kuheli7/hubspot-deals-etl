@@ -5,6 +5,8 @@ import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
+
 from models.models import JobStatus
 from models.database import check_database_health
 from utils import (
@@ -160,134 +162,51 @@ class ExtractionService:
             )
         return progress
 
-    async def start_scan(self, request_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Start new data extraction scan"""
-        scan_id = request_config.get("scanId", "unknown")
+    def register_scan(self, request_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create the job record synchronously, before the extraction starts.
+
+        The caller gets the scan ID back immediately, and duplicate or
+        concurrent requests for the same scanId are rejected atomically by the
+        jobs primary key instead of racing in background threads.
+        """
+        scan_id = request_config["scanId"]
+
+        if not check_database_health().get("healthy"):
+            self.logger.error(
+                "Database health check failed",
+                extra={"operation": "register_scan", "scan_id": scan_id},
+            )
+            return {"success": False, "conflict": False, "message": "Database is not available"}
 
         try:
-            self.logger.info(
-                "Scan initiation requested",
-                extra={
-                    "operation": "start_scan",
-                    "scan_id": scan_id,
-                    "organization_id": request_config.get("organizationId"),
-                },
-            )
-
-            # Start background task
-            asyncio.create_task(self._execute_scan_with_setup(request_config))
-
-            log_business_event(
-                self.logger,
-                "scan_initiated",
-                scan_id=scan_id,
-                organization_id=request_config.get("organizationId"),
-            )
-
-            return {
-                "success": True,
-                "scanId": scan_id,
-                "status": "initializing",
-                "message": f"{self.source_type} extraction scan initiated successfully",
-            }
-
-        except Exception as e:
-            self.logger.error(
-                "Failed to initiate scan",
-                extra={"operation": "start_scan", "scan_id": scan_id, "error": str(e)},
-                exc_info=True,
+            job = self.job_service.create_job(request_config)
+        except IntegrityError:
+            existing = self.job_service.get_job(scan_id) or {}
+            self.logger.warning(
+                "Duplicate scan rejected",
+                extra={"operation": "register_scan", "scan_id": scan_id,
+                       "existing_status": existing.get("status")},
             )
             return {
                 "success": False,
-                "scanId": scan_id,
-                "error": str(e),
-                "message": "Failed to initiate scan",
+                "conflict": True,
+                "message": f"A scan with ID '{scan_id}' already exists",
+                "existing_status": existing.get("status"),
             }
 
-    async def _execute_scan_with_setup(self, request_config: Dict[str, Any]):
-        """Handle setup validation and execution in background"""
-        scan_id = request_config.get("scanId", "unknown")
-
-        try:
-            self.logger.info(
-                "Starting scan setup",
-                extra={"operation": "scan_setup", "scan_id": scan_id},
-            )
-
-            # Database health check
-            if not check_database_health().get("healthy"):
-                error_msg = "Database is not available"
-                self.logger.error(
-                    "Database health check failed",
-                    extra={"operation": "scan_setup", "scan_id": scan_id},
-                )
-                try:
-                    job = self.job_service.create_job(request_config)
-                    self.job_service.fail_job(scan_id, error_msg)
-                except Exception:
-                    pass
-                return
-
-            # Check for existing job
-            existing_job = self.job_service.get_job(scan_id)
-            if existing_job:
-                if existing_job["status"] == JobStatus.CRASHED.value:
-                    self.job_service.update_job_status(scan_id, JobStatus.RESUMING)
-                    self.logger.info(
-                        "Resuming crashed job",
-                        extra={"operation": "scan_setup", "scan_id": scan_id},
-                    )
-                else:
-                    self.logger.warning(
-                        "Job already exists",
-                        extra={
-                            "operation": "scan_setup",
-                            "scan_id": scan_id,
-                            "existing_status": existing_job["status"],
-                        },
-                    )
-                    return
-            else:
-                # Create job entry
-                existing_job = self.job_service.create_job(request_config)
-                self.logger.info(
-                    "Job created successfully",
-                    extra={"operation": "scan_setup", "scan_id": scan_id},
-                )
-
-            # Update status and start execution
-            self.job_service.update_job_status(scan_id, JobStatus.RUNNING)
-            self.job_service.update_job_heartbeat(scan_id)
-
-            self.logger.info(
-                "Setup completed, starting extraction",
-                extra={"operation": "scan_setup", "scan_id": scan_id},
-            )
-
-            await self._execute_scan(scan_id)
-
-        except Exception as e:
-            self.logger.error(
-                "Setup failed",
-                extra={"operation": "scan_setup", "scan_id": scan_id, "error": str(e)},
-                exc_info=True,
-            )
-
-            try:
-                if not self.job_service.get_job(scan_id):
-                    self.job_service.create_job(request_config)
-
-                error_metadata = {
-                    "error_details": {
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                        "failed_at": datetime.now(timezone.utc).isoformat(),
-                        "failure_stage": "setup",
-                    }
-                }
-                self.job_service.fail_job(scan_id, str(e), error_metadata)
-            except Exception:
-                pass
+        log_business_event(
+            self.logger,
+            "scan_initiated",
+            scan_id=scan_id,
+            organization_id=request_config.get("organizationId"),
+        )
+        return {
+            "success": True,
+            "scanId": scan_id,
+            "status": job.get("status", JobStatus.PENDING.value),
+            "organizationId": job.get("organizationId"),
+        }
 
     async def _execute_scan(self, job_id: str):
         """

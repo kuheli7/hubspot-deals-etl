@@ -59,12 +59,14 @@ def create_api():
     results_ns = Namespace('results', description='Results retrieval operations')
     pipeline_ns = Namespace('pipeline', description='Pipeline operations')
     maintenance_ns = Namespace('maintenance', description='Maintenance operations')
+    jobs_ns = Namespace('jobs', description='Job listing and statistics (aliases of /scan/list and /scan/statistics)')
     
     api.add_namespace(scan_ns)
     api.add_namespace(auth_ns)
     api.add_namespace(results_ns)
     api.add_namespace(pipeline_ns)
     api.add_namespace(maintenance_ns)
+    api.add_namespace(jobs_ns)
     
     @scan_ns.route('/start')
     class StartScan(Resource):
@@ -121,26 +123,28 @@ def create_api():
                     filters=validated_config['filters']
                 )
 
-                # Check for existing scan
-                existing_scan = extraction_service.get_scan_status(scan_config.scanId)
-                if existing_scan:
+                # Create the job synchronously: the primary key makes duplicate and
+                # concurrent requests for the same scanId fail atomically with 409
+                registration = extraction_service.register_scan(validated_config)
+                if not registration["success"]:
+                    status_code = 409 if registration.get("conflict") else 503
                     logger.warning(
-                        "Duplicate scan attempt",
+                        "Scan not accepted",
                         extra={
                             'request_id': request_id,
                             'scan_id': scan_config.scanId,
-                            'existing_status': existing_scan.get('status')
+                            'reason': registration["message"]
                         }
                     )
                     return {
                         "success": False,
-                        "message": f"A scan with ID '{scan_config.scanId}' already exists",
-                        "error": f"A scan with ID '{scan_config.scanId}' already exists"
-                    }, 409
+                        "message": registration["message"],
+                        "error": registration["message"]
+                    }, status_code
 
-                # Start scan
-                executor.submit(asyncio.run, extraction_service.start_scan(validated_config))
-                
+                # Run the extraction in the background
+                executor.submit(asyncio.run, extraction_service.execute_scan(scan_config.scanId))
+
                 logger.info(
                     "Scan accepted for processing",
                     extra={
@@ -149,17 +153,24 @@ def create_api():
                         'organization_id': scan_config.organizationId
                     }
                 )
-                
+
                 log_business_event(
                     logger,
                     "scan_creation_accepted",
                     scan_id=scan_config.scanId,
                     organization_id=scan_config.organizationId
                 )
-                
+
                 return {
                     "success": True,
-                    "message": "Scan initialization accepted and is now processing in the background."
+                    "message": "Scan initialization accepted and is now processing in the background.",
+                    "data": {
+                        "scanId": scan_config.scanId,
+                        "organizationId": scan_config.organizationId,
+                        "status": registration["status"],
+                        "statusUrl": f"{api_config['prefix']}/scan/{scan_config.scanId}/status",
+                        "resultUrl": f"{api_config['prefix']}/results/{scan_config.scanId}/result"
+                    }
                 }, 202
 
             except Exception as e:
@@ -174,7 +185,7 @@ def create_api():
                     "error": str(e)
                 }, 500
 
-    @scan_ns.route('/<string:scan_id>/status')
+    @scan_ns.route('/<string:scan_id>/status', '/status/<string:scan_id>')
     class ScanStatus(Resource):
         @scan_ns.response(404, 'Scan not found')
         @scan_ns.response(500, 'Internal server error')
@@ -219,7 +230,7 @@ def create_api():
                     "error": str(e)
                 }, 500
 
-    @scan_ns.route('/<string:scan_id>/cancel')
+    @scan_ns.route('/<string:scan_id>/cancel', '/cancel/<string:scan_id>')
     class CancelScan(Resource):
         @scan_ns.response(409, 'Scan cannot be cancelled in its current state')
         @scan_ns.response(404, 'Scan not found')
@@ -267,6 +278,7 @@ def create_api():
                 }, 500
 
     @scan_ns.route('/list')
+    @jobs_ns.route('/jobs')
     class ListScans(Resource):
         @scan_ns.param('organizationId', 'Filter by organization ID')
         @scan_ns.param('limit', f'Number of results per page (max {api_config["max_scan_list_limit"]})', type=int, default=api_config['default_scan_list_limit'])
@@ -336,6 +348,7 @@ def create_api():
                 }, 500
 
     @scan_ns.route('/statistics')
+    @jobs_ns.route('/statistics')
     class ScanStatistics(Resource):
         @scan_ns.param('organizationId', 'Filter statistics by organization ID')
         def get(self):
@@ -420,6 +433,7 @@ def create_api():
                 }, 500
 
     @results_ns.route('/<string:scan_id>/result')
+    @scan_ns.route('/result/<string:scan_id>')
     class GetScanResults(Resource):
         @results_ns.param('tableName', 'Name of the table to query (default: deals)', default='deals')
         @results_ns.param('limit', f'Number of records per page (max {api_config["max_results_limit"]})', type=int, default=api_config['default_results_limit'])
@@ -656,7 +670,7 @@ def create_api():
                     "error": str(e)
                 }, 500
             
-    @scan_ns.route('/<string:scan_id>/remove')
+    @scan_ns.route('/<string:scan_id>/remove', '/remove/<string:scan_id>')
     class RemoveScan(Resource):
         @scan_ns.response(404, 'Scan not found')
         @scan_ns.response(400, 'Cannot remove active scan')
@@ -796,7 +810,7 @@ def create_api():
                     "error": str(e)
                 }, 500
 
-    @scan_ns.route('/<string:scan_id>/pause')
+    @scan_ns.route('/<string:scan_id>/pause', '/pause/<string:scan_id>')
     class PauseScan(Resource):
         @scan_ns.response(400, 'Cannot pause scan')
         @scan_ns.response(404, 'Scan not found')
@@ -843,7 +857,7 @@ def create_api():
                 }, 500
 
 
-    @scan_ns.route('/<string:scan_id>/resume')
+    @scan_ns.route('/<string:scan_id>/resume', '/resume/<string:scan_id>')
     class ResumeScan(Resource):
         @scan_ns.response(202, 'Scan is resuming from its last checkpoint')
         @scan_ns.response(404, 'Scan not found')

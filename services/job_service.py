@@ -740,7 +740,24 @@ class JobService:
                 week_ago = datetime.now(timezone.utc) - timedelta(days=7)
                 recent_jobs = query.filter(Job.startTime >= week_ago).count()
 
-                total_records = db.query(func.sum(Job.recordsExtracted)).scalar() or 0
+                # Respect the organization filter (the template summed every job)
+                total_records = query.with_entities(func.sum(Job.recordsExtracted)).scalar() or 0
+
+                # Extraction time of completed jobs, in seconds
+                durations = [
+                    (end - start).total_seconds()
+                    for start, end in query.filter(
+                        Job.status == JobStatus.COMPLETED.value,
+                        Job.endTime.isnot(None),
+                    ).with_entities(Job.startTime, Job.endTime).all()
+                    if start and end
+                ]
+                duration_stats = {
+                    "average_seconds": round(sum(durations) / len(durations), 3) if durations else None,
+                    "min_seconds": round(min(durations), 3) if durations else None,
+                    "max_seconds": round(max(durations), 3) if durations else None,
+                    "completed_jobs_measured": len(durations),
+                }
 
                 self.logger.debug(
                     "Job statistics retrieved",
@@ -757,6 +774,7 @@ class JobService:
                         "status_breakdown": status_counts,
                         "recent_jobs_7_days": recent_jobs,
                         "total_records_extracted": total_records,
+                        "extraction_time": duration_stats,
                         "organization_filter": organization_id,
                         "generated_at": datetime.now(timezone.utc).isoformat(),
                     }
