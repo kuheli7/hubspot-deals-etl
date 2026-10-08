@@ -1,11 +1,11 @@
 {
-  "run_id": "20261008193937",
-  "started_at": "2026-10-08T19:39:37.943843+00:00",
+  "run_id": "20261008201015",
+  "started_at": "2026-10-08T20:10:15.038044+00:00",
   "checks": [
     {
       "name": "GET /health returns 200 healthy",
       "passed": true,
-      "detail": "281.0 ms"
+      "detail": "47.0 ms"
     },
     {
       "name": "GET /api/v1/health returns healthy",
@@ -20,22 +20,22 @@
     {
       "name": "OpenAPI spec lists the deal endpoints",
       "passed": true,
-      "detail": "16 paths"
+      "detail": "24 paths"
     },
     {
       "name": "Access token valid with crm.objects.deals.read",
       "passed": true,
-      "detail": "rate limit headers: {'daily_limit': '250000', 'daily_remaining': '249977', 'interval_milliseconds': '10000', 'interval_max': '150', 'interval_remaining': '148', 'observed_at': '2026-10-08T19:39:39.031758+00:00'}"
+      "detail": "rate limit headers: {'daily_limit': '250000', 'daily_remaining': '249989', 'interval_milliseconds': '10000', 'interval_max': '150', 'interval_remaining': '146', 'observed_at': '2026-10-08T20:10:15.382843+00:00'}"
     },
     {
-      "name": "POST /scan/start accepted",
+      "name": "POST /scan/start returns 202 with the scan ID",
       "passed": true,
-      "detail": 202
+      "detail": "HTTP 202, data={'scanId': 'deals-e2e-20261008201015', 'organizationId': 'org-hubspot-test', 'status': 'pending', 'statusUrl': '/api/v1/scan/deals-e2e-20261008201015/status', 'resultUrl': '/api/v1/results/deals-e2e-20261008201015/result'}"
     },
     {
       "name": "Scan completed",
       "passed": true,
-      "detail": "timeline=pending -> running -> completed, 8.8s, error=None"
+      "detail": "timeline=pending -> running -> completed, 1.48s, error=None"
     },
     {
       "name": "All 5 test deals extracted",
@@ -55,7 +55,7 @@
     {
       "name": "API response time acceptable (< 120 s end-to-end)",
       "passed": true,
-      "detail": "8.8s"
+      "detail": "1.48s"
     },
     {
       "name": "deals table holds one row per HubSpot deal",
@@ -114,7 +114,7 @@
     {
       "name": "Resume accepted (202)",
       "passed": true,
-      "detail": "Job deals-checkpoint-20261008193937 is resuming from checkpoint"
+      "detail": "Job deals-checkpoint-20261008201015 is resuming from checkpoint"
     },
     {
       "name": "Resumed scan completed with all deals and no duplicates",
@@ -208,23 +208,53 @@
       "detail": "HTTP 400"
     },
     {
+      "name": "Edge case: 5,000-character job ID -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "Edge case: SQL injection in job ID -> 404",
+      "passed": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "name": "5 concurrent identical starts create exactly one job (one 202, four 409)",
+      "passed": true,
+      "detail": "status codes [202, 409, 409, 409, 409], job completed"
+    },
+    {
+      "name": "Guideline paths (/scan/status, /scan/result, /jobs/jobs, /jobs/statistics) answer like the primary routes",
+      "passed": true,
+      "detail": [
+        "/scan/status/deals-e2e-20261008201015",
+        "/scan/result/deals-e2e-20261008201015",
+        "/jobs/jobs?limit=5",
+        "/jobs/statistics"
+      ]
+    },
+    {
       "name": "Service restarts cleanly and is healthy again",
       "passed": true,
-      "detail": "10.8s"
+      "detail": "13.3s"
     },
     {
       "name": "Scans and results survive restart",
       "passed": true,
       "detail": null
+    },
+    {
+      "name": "DELETE /scan/remove removes the scan; status and results then return 404",
+      "passed": true,
+      "detail": "remove 200, status 404, result 404, rows left 0"
     }
   ],
   "hubspot_active_deals": 5,
   "page_delay_seconds": "0",
   "mock_latency_ms_for_checkpoint_tests": 1000,
-  "finished_at": "2026-10-08T19:41:51.394853+00:00",
+  "finished_at": "2026-10-08T20:12:27.270756+00:00",
   "summary": {
-    "passed": 40,
+    "passed": 45,
     "failed": 0,
-    "total": 40
+    "total": 45
   }
 }

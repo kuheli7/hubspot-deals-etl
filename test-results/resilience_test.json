@@ -1,5 +1,5 @@
 {
-  "run_id": "20261008194158",
+  "run_id": "20261008201237",
   "mock_accounts_before": {
     "test": {
       "portal_id": 48600123,
@@ -13,8 +13,8 @@
     }
   },
   "large_volume": {
-    "scan_id": "load-volume-20261008194158",
-    "seconds": 6.9,
+    "scan_id": "load-volume-20261008201237",
+    "seconds": 9.8,
     "final_status": "completed",
     "records_extracted": 2500,
     "rows": {
@@ -33,13 +33,13 @@
     "distinct_ids_via_results_api": 2500
   },
   "rate_limiting": {
-    "scan_id": "rate-limit-20261008194158",
+    "scan_id": "rate-limit-20261008201237",
     "mock_limit_per_10s": 20,
     "page_size": 50,
     "hubspot_requests": 51,
     "minimum_compliant_seconds": 20,
     "http_429_returned_by_hubspot": 0,
-    "seconds": 28.8,
+    "seconds": 36.0,
     "final_status": "completed",
     "rows": {
       "n": 2500,
@@ -47,22 +47,22 @@
     }
   },
   "transient_5xx": {
-    "scan_id": "transient-5xx-20261008194158",
+    "scan_id": "transient-5xx-20261008201237",
     "final_status": "completed",
     "records": 5
   },
   "outage_then_resume": {
-    "scan_id": "outage-resume-20261008194158",
+    "scan_id": "outage-resume-20261008201237",
     "failed_status": "failed",
     "error_message": "HubSpot server error (503): An internal error occurred. Please try again later.",
     "checkpoint_at_failure": {
-      "id": 22,
-      "job_id": "outage-resume-20261008194158",
-      "createdAt": "2026-10-08T19:42:43.651847+00:00",
+      "id": 23,
+      "job_id": "outage-resume-20261008201237",
+      "createdAt": "2026-10-08T20:13:35.516057+00:00",
       "phase": "deals_batch_committed",
       "recordsProcessed": 2,
       "totalEstimated": null,
-      "cursor": "40100000008",
+      "cursor": "40100000003",
       "pageNumber": 2,
       "batchSize": 1,
       "lastProcessedId": null,
@@ -75,9 +75,9 @@
         "finished": false,
         "stop_reason": null,
         "resumed_from_page": null,
-        "committed_at": "2026-10-08T19:42:43.558267+00:00",
+        "committed_at": "2026-10-08T20:13:35.506833+00:00",
         "load_ids": [
-          "1791488562.9336166"
+          "1791490415.1450293"
         ],
         "rate_limit": {
           "daily_limit": "250000",
@@ -85,7 +85,7 @@
           "interval_milliseconds": "10000",
           "interval_max": "150",
           "interval_remaining": "145",
-          "observed_at": "2026-10-08T19:42:43.035665+00:00"
+          "observed_at": "2026-10-08T20:13:35.187087+00:00"
         }
       },
       "progress_percentage": null
@@ -103,33 +103,33 @@
     "records_extracted": 5
   },
   "daily_limit": {
-    "scan_id": "daily-limit-20261008194158",
+    "scan_id": "daily-limit-20261008201237",
     "final_status": "failed",
     "error_message": "HubSpot rate limit exceeded (429): You have reached your daily limit.",
-    "seconds": 1.2
+    "seconds": 2.0
   },
   "missing_scope": {
-    "scan_id": "missing-scope-20261008194158",
+    "scan_id": "missing-scope-20261008201237",
     "final_status": "failed",
     "error_message": "HubSpot access token is missing a required scope - deal extraction needs crm.objects.deals.read (403): This app hasn't been granted all required scopes to make this call. Read more about required scopes here: https://developers.hubspot.com/scopes."
   },
   "archived": {
-    "scan_id": "archived-20261008194158",
+    "scan_id": "archived-20261008201237",
     "archived_in_hubspot": 1,
     "records": [
       {
         "id": "50200000001",
         "dealname": "Acme - Enterprise Expansion #1",
         "archived": true,
-        "archived_at": "2026-10-08T19:42:58.884000+00:00"
+        "archived_at": "2026-10-08T20:13:51.179000+00:00"
       }
     ]
   },
   "mock_stats_after": {
-    "requests": 140,
+    "requests": 130,
     "by_status": {
-      "200": 119,
-      "201": 10,
+      "200": 114,
+      "201": 5,
       "401": 2,
       "502": 2,
       "503": 4,
@@ -161,13 +161,13 @@
         "archived": 1
       }
     },
-    "started_at": "2026-10-08T19:38:34.471Z"
+    "started_at": "2026-10-08T20:09:44.340Z"
   },
   "checks": [
     {
       "name": "Large volume: 2500 deals extracted across 25 HubSpot pages",
       "passed": true,
-      "detail": "6.9s, 3 checkpointed batches"
+      "detail": "9.8s, 3 checkpointed batches"
     },
     {
       "name": "Large volume: results API pages through every row without duplicates",
@@ -177,7 +177,7 @@
     {
       "name": "Rate limit: a 20 requests / 10 s quota is respected and the scan still completes",
       "passed": true,
-      "detail": "51 requests in 28.8s (>= 20s), 0 x 429 received and retried, 2500 rows"
+      "detail": "51 requests in 36.0s (>= 20s), 0 x 429 received and retried, 2500 rows"
     },
     {
       "name": "Transient 502s are retried and the scan completes",

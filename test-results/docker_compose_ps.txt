@@ -1,5 +1,5 @@
-NAME                         IMAGE                                         COMMAND                  SERVICE                     CREATED         STATUS                   PORTS
-hubspot_deals_hubspot_mock   hubspot-deals-etl-hubspot_mock                "python -m mock_hubs…"   hubspot_mock                6 minutes ago   Up 6 minutes (healthy)   0.0.0.0:5299->5299/tcp, [::]:5299->5299/tcp
-hubspot_deals_postgres_dev   postgres:15-alpine                            "docker-entrypoint.s…"   postgres_dev                6 minutes ago   Up 6 minutes (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
-hubspot_deals_redis          redis:7-alpine                                "docker-entrypoint.s…"   redis                       6 minutes ago   Up 6 minutes (healthy)   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
-hubspot_deals_service_dev    hubspot-deals-etl-hubspot_deals_service_dev   "python app.py"          hubspot_deals_service_dev   6 minutes ago   Up 3 minutes (healthy)   0.0.0.0:5200->5200/tcp, [::]:5200->5200/tcp
+NAME                         IMAGE                                         COMMAND                  SERVICE                     CREATED         STATUS                    PORTS
+hubspot_deals_hubspot_mock   hubspot-deals-etl-hubspot_mock                "python -m mock_hubs…"   hubspot_mock                2 minutes ago   Up 2 minutes (healthy)    0.0.0.0:5299->5299/tcp, [::]:5299->5299/tcp
+hubspot_deals_postgres_dev   postgres:15-alpine                            "docker-entrypoint.s…"   postgres_dev                2 minutes ago   Up 2 minutes (healthy)    0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+hubspot_deals_redis          redis:7-alpine                                "docker-entrypoint.s…"   redis                       2 minutes ago   Up 2 minutes (healthy)    0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+hubspot_deals_service_dev    hubspot-deals-etl-hubspot_deals_service_dev   "python app.py"          hubspot_deals_service_dev   2 minutes ago   Up 12 seconds (healthy)   0.0.0.0:5200->5200/tcp, [::]:5200->5200/tcp

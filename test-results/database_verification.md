@@ -57,8 +57,8 @@ Rows loaded by this scan:
 
 | id | dealname | amount | dealstage | closedate | _tenant_id |
 |---|---|---|---|---|---|
-| 40100000006 | Acme Corp - Starter Plan | 5000.00 | qualifiedtobuy | 2026-11-07 17:00:00+00:00 | org-hubspot-test |
-| 40100000007 | Globex - Annual Subscription | 25000.00 | presentationscheduled | 2026-11-22 17:00:00+00:00 | org-hubspot-test |
-| 40100000008 | Initech - Enterprise Expansion | 50000.00 | closedwon | 2026-09-28 17:00:00+00:00 | org-hubspot-test |
-| 40100000009 | Umbrella Health - Platform Migration | 75000.00 | closedlost | 2026-10-03 17:00:00+00:00 | org-hubspot-test |
-| 40100000010 | Stark Industries - Multi-year Contract | 100000.00 | contractsent | 2026-12-07 17:00:00+00:00 | org-hubspot-test |
+| 40100000001 | Acme Corp - Starter Plan | 5000.00 | qualifiedtobuy | 2026-11-07 17:00:00+00:00 | org-hubspot-test |
+| 40100000002 | Globex - Annual Subscription | 25000.00 | presentationscheduled | 2026-11-22 17:00:00+00:00 | org-hubspot-test |
+| 40100000003 | Initech - Enterprise Expansion | 50000.00 | closedwon | 2026-09-28 17:00:00+00:00 | org-hubspot-test |
+| 40100000004 | Umbrella Health - Platform Migration | 75000.00 | closedlost | 2026-10-03 17:00:00+00:00 | org-hubspot-test |
+| 40100000005 | Stark Industries - Multi-year Contract | 100000.00 | contractsent | 2026-12-07 17:00:00+00:00 | org-hubspot-test |

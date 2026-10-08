@@ -1,6 +1,6 @@
 {
   "restart_exit_code": 0,
-  "seconds_until_healthy": 10.8,
+  "seconds_until_healthy": 13.3,
   "scan_status_after_restart": "completed",
   "results_after_restart": 200
 }

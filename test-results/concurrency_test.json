@@ -1,0 +1,13 @@
+{
+  "scan_id": "deals-concurrent-20261008201015",
+  "status_codes": [
+    202,
+    409,
+    409,
+    409,
+    409
+  ],
+  "jobs_created": 1,
+  "final_status": "completed",
+  "records_extracted": 5
+}

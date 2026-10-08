@@ -1,0 +1,22 @@
+{
+  "/scan/status/deals-e2e-20261008201015": {
+    "status": 200,
+    "same_as": "/scan/deals-e2e-20261008201015/status",
+    "identical": true
+  },
+  "/scan/result/deals-e2e-20261008201015": {
+    "status": 200,
+    "same_as": "/results/deals-e2e-20261008201015/result",
+    "identical": true
+  },
+  "/jobs/jobs?limit=5": {
+    "status": 200,
+    "same_as": "/scan/list?limit=5",
+    "identical": true
+  },
+  "/jobs/statistics": {
+    "status": 200,
+    "same_as": "/scan/statistics",
+    "identical": true
+  }
+}

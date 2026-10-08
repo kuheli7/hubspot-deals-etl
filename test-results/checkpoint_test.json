@@ -1,5 +1,5 @@
 {
-  "scan_id": "deals-checkpoint-20261008193937",
+  "scan_id": "deals-checkpoint-20261008201015",
   "tenant": "org-hubspot-ckpt",
   "filters": {
     "pageSize": 1,
@@ -7,12 +7,12 @@
   },
   "first_committed_checkpoint": {
     "id": 2,
-    "job_id": "deals-checkpoint-20261008193937",
-    "createdAt": "2026-10-08T19:39:55.367245+00:00",
+    "job_id": "deals-checkpoint-20261008201015",
+    "createdAt": "2026-10-08T20:10:20.582250+00:00",
     "phase": "deals_batch_committed",
     "recordsProcessed": 1,
     "totalEstimated": null,
-    "cursor": "40100000007",
+    "cursor": "40100000002",
     "pageNumber": 1,
     "batchSize": 1,
     "lastProcessedId": null,
@@ -25,17 +25,17 @@
       "finished": false,
       "stop_reason": null,
       "resumed_from_page": null,
-      "committed_at": "2026-10-08T19:39:55.354336+00:00",
+      "committed_at": "2026-10-08T20:10:20.537445+00:00",
       "load_ids": [
-        "1791488393.2033956"
+        "1791490218.8234587"
       ],
       "rate_limit": {
         "daily_limit": "250000",
-        "daily_remaining": "249973",
+        "daily_remaining": "249985",
         "interval_milliseconds": "10000",
         "interval_max": "150",
-        "interval_remaining": "147",
-        "observed_at": "2026-10-08T19:39:54.616187+00:00"
+        "interval_remaining": "144",
+        "observed_at": "2026-10-08T20:10:19.890494+00:00"
       }
     },
     "progress_percentage": null
@@ -44,13 +44,13 @@
     "status_code": 200,
     "body": {
       "success": true,
-      "scanId": "deals-checkpoint-20261008193937",
-      "message": "Job deals-checkpoint-20261008193937 has been paused successfully",
+      "scanId": "deals-checkpoint-20261008201015",
+      "message": "Job deals-checkpoint-20261008201015 has been paused successfully",
       "data": {
-        "scanId": "deals-checkpoint-20261008193937",
+        "scanId": "deals-checkpoint-20261008201015",
         "previousStatus": "running",
         "currentStatus": "paused",
-        "pausedAt": "2026-10-08T19:39:55.584353+00:00",
+        "pausedAt": "2026-10-08T20:10:20.948172+00:00",
         "progress": {
           "recordsProcessed": 1,
           "currentPage": 1,
@@ -63,12 +63,12 @@
   "paused_status": "paused",
   "paused_checkpoint": {
     "id": 3,
-    "job_id": "deals-checkpoint-20261008193937",
-    "createdAt": "2026-10-08T19:39:56.987023+00:00",
+    "job_id": "deals-checkpoint-20261008201015",
+    "createdAt": "2026-10-08T20:10:22.087638+00:00",
     "phase": "deals_paused",
     "recordsProcessed": 2,
     "totalEstimated": null,
-    "cursor": "40100000008",
+    "cursor": "40100000003",
     "pageNumber": 2,
     "batchSize": 1,
     "lastProcessedId": null,
@@ -81,17 +81,17 @@
       "finished": false,
       "stop_reason": "paused",
       "resumed_from_page": null,
-      "committed_at": "2026-10-08T19:39:56.974967+00:00",
+      "committed_at": "2026-10-08T20:10:22.076780+00:00",
       "load_ids": [
-        "1791488395.4929152"
+        "1791490220.7024155"
       ],
       "rate_limit": {
         "daily_limit": "250000",
-        "daily_remaining": "249972",
+        "daily_remaining": "249984",
         "interval_milliseconds": "10000",
         "interval_max": "150",
-        "interval_remaining": "147",
-        "observed_at": "2026-10-08T19:39:56.586234+00:00"
+        "interval_remaining": "143",
+        "observed_at": "2026-10-08T20:10:21.771530+00:00"
       }
     },
     "progress_percentage": null
@@ -109,18 +109,18 @@
     "status_code": 202,
     "body": {
       "success": true,
-      "scanId": "deals-checkpoint-20261008193937",
-      "message": "Job deals-checkpoint-20261008193937 is resuming from checkpoint",
+      "scanId": "deals-checkpoint-20261008201015",
+      "message": "Job deals-checkpoint-20261008201015 is resuming from checkpoint",
       "data": {
-        "scanId": "deals-checkpoint-20261008193937",
+        "scanId": "deals-checkpoint-20261008201015",
         "previousStatus": "paused",
         "currentStatus": "resuming",
-        "resumedAt": "2026-10-08T19:39:57.522798+00:00",
+        "resumedAt": "2026-10-08T20:10:22.352164+00:00",
         "resumePoint": {
           "page": 2,
           "recordsProcessed": 2,
           "phase": "deals_paused",
-          "cursor": "40100000008"
+          "cursor": "40100000003"
         }
       }
     }
@@ -136,41 +136,40 @@
       "phase": "deals_batch_committed",
       "pageNumber": 1,
       "recordsProcessed": 1,
-      "cursor": "40100000007",
-      "createdAt": "2026-10-08 19:39:55.367245+00:00"
+      "cursor": "40100000002",
+      "createdAt": "2026-10-08 20:10:20.582250+00:00"
     },
     {
       "phase": "deals_paused",
       "pageNumber": 2,
       "recordsProcessed": 2,
-      "cursor": "40100000008",
-      "createdAt": "2026-10-08 19:39:56.987023+00:00"
+      "cursor": "40100000003",
+      "createdAt": "2026-10-08 20:10:22.087638+00:00"
     },
     {
       "phase": "deals_batch_committed",
       "pageNumber": 3,
       "recordsProcessed": 3,
-      "cursor": "40100000009",
-      "createdAt": "2026-10-08 19:40:00.602237+00:00"
+      "cursor": "40100000004",
+      "createdAt": "2026-10-08 20:10:25.100972+00:00"
     },
     {
       "phase": "deals_batch_committed",
       "pageNumber": 4,
       "recordsProcessed": 4,
-      "cursor": "40100000010",
-      "createdAt": "2026-10-08 19:40:02.243826+00:00"
+      "cursor": "40100000005",
+      "createdAt": "2026-10-08 20:10:26.689197+00:00"
     },
     {
       "phase": "deals_completed",
       "pageNumber": 5,
       "recordsProcessed": 5,
       "cursor": null,
-      "createdAt": "2026-10-08 19:40:04.067414+00:00"
+      "createdAt": "2026-10-08 20:10:28.327503+00:00"
     }
   ],
   "status_timeline": [
     "paused",
-    "resuming",
     "running",
     "completed"
   ]

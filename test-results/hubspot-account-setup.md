@@ -29,11 +29,11 @@ Created through `POST /crm/v3/objects/deals` by [`scripts/create_test_deals.py`]
 
 | Deal ID | Deal name | Amount | Stage | Type | Close date |
 |---|---|---|---|---|---|
-| 40100000006 | Acme Corp - Starter Plan | $5,000 | Qualified To Buy | New Business | +30 days |
-| 40100000007 | Globex - Annual Subscription | $25,000 | Presentation Scheduled | New Business | +45 days |
-| 40100000008 | Initech - Enterprise Expansion | $50,000 | Closed Won | Existing Business | -10 days |
-| 40100000009 | Umbrella Health - Platform Migration | $75,000 | Closed Lost (reason recorded) | New Business | -5 days |
-| 40100000010 | Stark Industries - Multi-year Contract | $100,000 | Contract Sent | New Business | +60 days |
+| 40100000001 | Acme Corp - Starter Plan | $5,000 | Qualified To Buy | New Business | +30 days |
+| 40100000002 | Globex - Annual Subscription | $25,000 | Presentation Scheduled | New Business | +45 days |
+| 40100000003 | Initech - Enterprise Expansion | $50,000 | Closed Won | Existing Business | -10 days |
+| 40100000004 | Umbrella Health - Platform Migration | $75,000 | Closed Lost (reason recorded) | New Business | -5 days |
+| 40100000005 | Stark Industries - Multi-year Contract | $100,000 | Contract Sent | New Business | +60 days |
 
 Each deal has a description and a priority (low / medium / high).
 

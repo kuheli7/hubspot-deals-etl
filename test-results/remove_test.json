@@ -1,0 +1,18 @@
+{
+  "scan_id": "deals-checkpoint-20261008201015",
+  "remove": {
+    "status_code": 200,
+    "body": {
+      "success": true,
+      "message": "Scan deals-checkpoint-20261008201015 successfully removed",
+      "data": {
+        "scanId": "deals-checkpoint-20261008201015",
+        "tablesRemoved": 1,
+        "metadataRemoved": true
+      }
+    }
+  },
+  "status_after": 404,
+  "result_after": 404,
+  "rows_left": 0
+}
