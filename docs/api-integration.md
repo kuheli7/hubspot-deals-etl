@@ -49,7 +49,7 @@ Private app tokens are created in HubSpot under **Settings → Integrations → 
 | Concern | Behaviour |
 |---|---|
 | Source | Sent by the caller in each scan request (`config.auth.accessToken`); never read from the service environment |
-| Storage | Encrypted with Fernet (PBKDF2-derived key from `CONFIG_PASSWORD`) inside `jobs.config` so paused/crashed scans can resume |
+| Storage | Encrypted with Fernet (PBKDF2-derived key from `CONFIG_PASSWORD`) inside `jobs.config` so paused, crashed or failed scans can resume |
 | Exposure | Redacted (`***redacted***`) in every API response and log line; validation logs show only a masked form (`pat-na1...abcd`) |
 | Isolation | Sent per request (not stored on the shared HTTP session), so concurrent scans for different tenants never share credentials |
 | Validation | `POST /api/v1/auth/validate` and the first step of every scan call `GET /crm/v3/objects/deals?limit=1` to confirm the token works *and* has the deals read scope |
@@ -291,7 +291,7 @@ The assignment specifies **150 requests / 10 seconds**, which is the service def
 | `404 Not Found` | `HubSpotNotFoundError` | No | `failed` (only possible for single-deal reads) |
 | `429 TEN_SECONDLY_ROLLING` | `HubSpotRateLimitError` | Yes, up to 3 times | Continues; fails only if still limited after retries |
 | `429 DAILY` | `HubSpotRateLimitError` | No | `failed` with the daily-limit message |
-| `5xx` | `HubSpotServerError` | Yes, exponential back-off | Continues; fails after 3 retries |
+| `5xx` | `HubSpotServerError` | Yes, exponential back-off | Continues; fails after 3 retries, then resumable from the last checkpoint with `POST /scan/{id}/resume` |
 | Connection error / timeout (`HUBSPOT_API_TIMEOUT`=30 s) | `HubSpotServerError` | Yes, exponential back-off | Continues; fails after 3 retries |
 
 HubSpot error bodies include a `correlationId`; it is logged with every failed request so it can be quoted to HubSpot support. dlt wraps source exceptions in `PipelineStepFailed`, so the extraction service unwraps the chain and stores the original HubSpot message in `jobs.errorMessage`.
@@ -335,7 +335,7 @@ HubSpot error bodies include a `correlationId`; it is logged with every failed r
 | `notes_last_updated` | Last activity date | datetime | `timestamptz` |
 
 ### All HubSpot default deal properties
-Grouped as in HubSpot's knowledge base article [*HubSpot's default deal properties*](https://knowledge.hubspot.com/properties/hubspots-default-deal-properties). The article lists labels only; internal names below are HubSpot's standard names. The **authoritative list for an account**, including custom properties and exact types, is produced from `GET /crm/v3/properties/deals` by `python scripts/export_deal_properties.py` → [`deal-properties.md`](deal-properties.md).
+Grouped as in HubSpot's knowledge base article [*HubSpot's default deal properties*](https://knowledge.hubspot.com/properties/hubspots-default-deal-properties). The article lists labels only; internal names below are HubSpot's standard names. The **authoritative list for a real account**, including custom properties and exact types, comes from `GET /crm/v3/properties/deals`: run `python scripts/export_deal_properties.py` against the account. [`deal-properties.md`](deal-properties.md) was generated this way from the local HubSpot mock's property catalogue.
 
 **Deal information**
 | Label | Internal name | Notes |
@@ -473,7 +473,7 @@ curl -s "https://api.hubapi.com/crm/v3/pipelines/deals"  -H "Authorization: Bear
 
 ### **Automated tests**
 - `pytest` - unit tests with a mocked HTTP session: auth header, query params, cursor pagination, 401/403, 429 retry (burst and daily), 5xx/network retry, rate limiter, transformations, batching/resume.
-- `tests/mock_hubspot_server.py` - local HubSpot stand-in for offline integration tests.
+- `tests/test_mock_hubspot_contract.py` - contract tests that keep the HubSpot mock faithful to the behaviour documented here.
 - `scripts/run_extraction_test.py` - end-to-end run against a real HubSpot test account; writes evidence to `test-results/`.
 
 ---
@@ -489,6 +489,31 @@ curl -s "https://api.hubapi.com/crm/v3/pipelines/deals"  -H "Authorization: Bear
 | `429 ... daily limit` | Daily quota exhausted | Wait for the reset at midnight (account time zone) |
 | Scan completes with 0 deals | Account has no active deals, or deals are archived | Check in HubSpot; use `filters.archived: true` for deleted deals |
 | `dealstage` shows numbers | Custom stages have numeric IDs | Map with `GET /crm/v3/pipelines/deals` |
+
+---
+
+## 🧪 Local HubSpot API Mock
+
+HubSpot developer account creation for this assignment required government-ID verification. With the project manager's approval, development and all recorded tests use a local mock that matches the HubSpot REST endpoints described in this document: [`mock_hubspot/`](../mock_hubspot/README.md).
+
+| Aspect | Matched behaviour |
+|---|---|
+| Endpoints | `GET/POST /crm/v3/objects/deals`, `GET/PATCH/DELETE /crm/v3/objects/deals/{id}`, `GET /crm/v3/properties/deals`, `GET /crm/v3/pipelines/deals`, `GET /account-info/v3/details` |
+| Auth | `Authorization: Bearer <private app token>`; unknown token → 401 with HubSpot's `INVALID_AUTHENTICATION` body |
+| Scopes | `crm.objects.deals.read` for reads, `crm.objects.deals.write` for writes; missing → 403 `MISSING_SCOPES` |
+| Pagination | `limit` (default 10, max 100), `after` cursor, `paging.next.{after,link}` absent on the last page |
+| Properties | string values, `null` for empty requested properties, unknown names omitted, HubSpot's default set when none requested, calculated properties maintained |
+| Errors | HubSpot error body `{status, message, correlationId, category}`; validation errors per property |
+| Rate limits | `X-HubSpot-RateLimit-*` headers on every response; 429 with `policyName` `TEN_SECONDLY_ROLLING` or `DAILY` |
+
+Switching between the mock and HubSpot needs no code changes:
+
+| Setting | Mock | HubSpot |
+|---|---|---|
+| `HUBSPOT_API_BASE_URL` (service) | `http://hubspot_mock:5299` (set by `docker-compose.mock.yml`) | `https://api.hubapi.com` |
+| Access token in scan requests | `pat-mock-test-account-deals` | private app token `pat-...` |
+
+The mock also offers admin endpoints (`/__mock/faults`, `/__mock/config`) to inject 429/5xx responses, latency and stricter quotas. `scripts/run_mock_resilience_test.py` uses them to test the retry, back-off and resume behaviour described above.
 
 ---
 

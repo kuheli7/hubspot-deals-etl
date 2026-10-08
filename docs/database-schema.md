@@ -235,7 +235,7 @@ DELETE FROM public.jobs WHERE "organizationId" = 'org-12345';
 |---|---|
 | Write disposition | `merge` on primary key `id` (dlt delete-insert through the `_staging` schema) |
 | Re-running a scan | upserts: each deal keeps one row, refreshed with the latest values and `_scan_id` |
-| Pause / crash / resume | each batch of N pages is loaded, then checkpointed; resume continues from the stored cursor and can re-read at most one partially processed batch, which `merge` deduplicates |
+| Pause / crash / failure / resume | each batch of N pages is loaded, then checkpointed; resume continues from the stored cursor and can re-read at most one partially processed batch, which `merge` deduplicates |
 | Removing a scan | `DELETE FROM deals WHERE _scan_id = %s`, then the job and its checkpoints are deleted |
 | Cleanup | `POST /api/v1/maintenance/cleanup {"daysOld": 7}` removes finished job records (and their checkpoints) older than N days; extracted deal rows are kept |
 

@@ -40,7 +40,7 @@ Extractions are **asynchronous scans**. `POST /scan/start` returns `202 Accepted
 pending → running ──────────────► completed
              │  ▲        resume       
              │  └──── paused ◄────┘ (POST /pause, then POST /resume → resuming → running)
-             ├──► failed      (HubSpot / database error; errorMessage set)
+             ├──► failed      (HubSpot / database error; errorMessage set) → resume once HubSpot recovers
              ├──► cancelled   (POST /cancel)
              └──► crashed     (no heartbeat; POST /maintenance/detect-crashed) → resume
 ```
@@ -52,7 +52,7 @@ pending → running ──────────────► completed
 | `paused` | Stopped at a page boundary; all fetched pages are loaded and checkpointed |
 | `resuming` | Resume accepted; continues from the last checkpoint |
 | `completed` | All pages loaded; results available |
-| `failed` | Stopped by an error; see `errorMessage` |
+| `failed` | Stopped by an error; see `errorMessage`. Resumable from its last checkpoint |
 | `cancelled` | Stopped by the user; pages loaded before cancellation remain |
 | `crashed` | Marked by crash detection after a missed heartbeat; resumable |
 
@@ -344,7 +344,7 @@ Stops the scan at the next page boundary. Pages already fetched are loaded and a
 
 **`POST /api/v1/scan/{scanId}/resume`**
 
-Continues a `paused` or `crashed` scan from its last committed checkpoint.
+Continues a `paused`, `crashed` or `failed` scan from its last committed checkpoint (a crashed scan without a checkpoint restarts from page 1). The previous `errorMessage` is cleared.
 
 #### Response
 ```json
@@ -363,7 +363,7 @@ Continues a `paused` or `crashed` scan from its last committed checkpoint.
 ```
 
 #### Status Codes
-`202` resuming · `404` unknown scan · `409` scan is not paused/crashed, or has no checkpoint
+`202` resuming · `404` unknown scan · `409` scan is not paused/crashed/failed, or a failed scan has no checkpoint
 
 ---
 
