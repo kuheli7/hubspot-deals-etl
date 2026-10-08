@@ -42,11 +42,14 @@ def main() -> int:
         by_group[prop.get("groupName") or "other"].append(prop)
 
     hubspot_defined = sum(1 for p in properties if p.get("hubspotDefined"))
+    base_url = env.get("HUBSPOT_API_BASE_URL", "https://api.hubapi.com")
+    source = ("the HubSpot test account" if "hubapi.com" in base_url
+              else "the local HubSpot API mock (`mock_hubspot/`, modelled on HubSpot's default deal properties)")
     lines = [
         "# HubSpot Deal Properties",
         "",
         f"Generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC} from `GET /crm/v3/properties/deals` "
-        "on the HubSpot test account by `scripts/export_deal_properties.py`.",
+        f"on {source} by `scripts/export_deal_properties.py`.",
         "",
         f"**{len(properties)} properties** ({hubspot_defined} HubSpot-defined, "
         f"{len(properties) - hubspot_defined} custom). Properties marked **extracted** are requested by "

@@ -24,6 +24,7 @@ def load_env(path: pathlib.Path = PROJECT_ROOT / ".env") -> Dict[str, str]:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
+            value = value.split(" #", 1)[0]  # allow inline comments like docker compose
             values[key.strip()] = value.strip().strip('"').strip("'")
     values.update({k: v for k, v in os.environ.items() if k.startswith(("HUBSPOT_", "DB_", "SERVICE_"))})
     return values

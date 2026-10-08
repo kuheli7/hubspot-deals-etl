@@ -25,3 +25,7 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Curated test logs are part of the submission evidence
+!test-results/logs/
+!test-results/logs/*.log

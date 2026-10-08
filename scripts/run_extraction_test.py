@@ -400,7 +400,8 @@ def test_restart(scan_id: str) -> None:
 
 
 def save_environment_snapshot() -> None:
-    ps = subprocess.run(["docker", "compose", "ps"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    ps = subprocess.run(["docker", "compose", "ps"], cwd=PROJECT_ROOT, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
     write_text("docker_compose_ps.txt", ps.stdout)
     logs = subprocess.run(["docker", "compose", "logs", "--no-color", "--since", "20m", "hubspot_deals_service_dev"],
                           cwd=PROJECT_ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -431,6 +432,9 @@ def main() -> int:
     parser.add_argument("--restart-test", action="store_true", help="also restart the service container")
     parser.add_argument("--crash-test", action="store_true",
                         help="kill the service mid-scan, detect the crash and resume (takes ~2 minutes)")
+    parser.add_argument("--mock-latency-ms", type=int, default=0,
+                        help="when running against the HubSpot mock: per-request latency during the "
+                             "pause/resume and crash tests")
     args = parser.parse_args()
 
     env = load_env()
@@ -453,9 +457,18 @@ def main() -> int:
         return 1
     scan_id = test_full_extraction(token, env, expected, account_total)
     test_database(env, scan_id, expected, account_total)
-    test_checkpoint_resume(token, env, account_total)
-    if args.crash_test:
-        test_crash_recovery(token, env, account_total)
+    mock_url = env.get("HUBSPOT_MOCK_URL", "http://localhost:5299")
+    if args.mock_latency_ms:
+        # Slow the mock HubSpot down so pause / crash land mid-scan deterministically
+        requests.put(f"{mock_url}/__mock/config", json={"latency_ms": args.mock_latency_ms}, timeout=10)
+        report["mock_latency_ms_for_checkpoint_tests"] = args.mock_latency_ms
+    try:
+        test_checkpoint_resume(token, env, account_total)
+        if args.crash_test:
+            test_crash_recovery(token, env, account_total)
+    finally:
+        if args.mock_latency_ms:
+            requests.put(f"{mock_url}/__mock/config", json={"latency_ms": 0}, timeout=10)
     test_edge_cases(token, scan_id)
     if args.restart_test:
         test_restart(scan_id)
