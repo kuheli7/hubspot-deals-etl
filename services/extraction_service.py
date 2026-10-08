@@ -14,10 +14,32 @@ from utils import (
     build_dlt_env_vars,
 )
 from .database_service import DatabaseService
-from .data_source import create_data_source
+from .data_source import create_data_source, ExtractionProgress, DEALS_TABLE
+from .hubspot_api_service import HubSpotAPIService, HubSpotAPIError
 
 from .job_service import JobService
 from loki_logger import get_logger, log_business_event, log_security_event
+
+# Checkpoint phases written to job_checkpoints.phase
+PHASE_BATCH = "deals_batch_committed"
+PHASE_PAUSED = "deals_paused"
+PHASE_CANCELLED = "deals_cancelled"
+PHASE_COMPLETED = "deals_completed"
+
+
+def root_cause_message(error: BaseException) -> str:
+    """
+    dlt wraps source errors in PipelineStepFailed; walk the exception chain
+    so the job records the underlying HubSpot error instead of the wrapper.
+    """
+    seen = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, HubSpotAPIError):
+            return current.message
+        current = current.__cause__ or current.__context__ or getattr(current, "exception", None)
+    return str(error)
 
 
 class ExtractionService:
@@ -65,67 +87,37 @@ class ExtractionService:
                 exc_info=True,
             )
 
+    def create_hubspot_api_service(self) -> HubSpotAPIService:
+        """New HubSpot client per scan so each scan has its own rate limiter"""
+        return HubSpotAPIService.from_config(self.config)
+
+    def validate_credentials(self, access_token: str) -> Dict[str, Any]:
+        """Check a HubSpot access token without starting a scan"""
+        return self.create_hubspot_api_service().validate_credentials(access_token)
+
     def create_source_with_checkpoints(
         self,
         auth_config: Dict[str, Any],
         job_config: Dict[str, Any],
         filters: Dict[str, Any],
         job_id: str,
+        progress: ExtractionProgress,
+        api_service: HubSpotAPIService,
     ):
-        """Create DLT data source with checkpointing support"""
+        """Create the DLT deals source for the next batch, wired to cancel/pause checks"""
         try:
-            # Check for existing checkpoint
-            resume_from = None
-            latest_checkpoint = self.job_service.get_latest_checkpoint(job_id)
-
-            if latest_checkpoint and latest_checkpoint.get("cursor"):
-                resume_from = {
-                    "cursor": latest_checkpoint["cursor"],
-                    "page_number": latest_checkpoint.get("pageNumber", 0),
-                    "records_processed": latest_checkpoint.get("recordsProcessed", 0),
-                }
-                self.logger.info(
-                    "Resuming from checkpoint",
-                    extra={
-                        "operation": "create_source",
-                        "job_id": job_id,
-                        "resume_page": resume_from["page_number"],
-                    },
-                )
-
-            def checkpoint_callback(
-                job_id_from_source: str, checkpoint_data: Dict[str, Any]
-            ):
-                try:
-                    self.job_service.save_checkpoint(
-                        job_id_from_source, checkpoint_data
-                    )
-                    self.job_service.update_job_heartbeat(job_id_from_source)
-                except Exception as e:
-                    self.logger.warning(
-                        "Checkpoint callback failed",
-                        extra={"job_id": job_id_from_source, "error": str(e)},
-                    )
 
             def check_cancel_callback(job_id_from_source: str) -> bool:
                 try:
                     job = self.job_service.get_job(job_id_from_source)
-                    self.logger.info(
-                        "Cancel check performed",
-                        extra={
-                            "job_id": job_id_from_source,
-                            "status": job.get("status") if job else "not_found",
-                        },
-                    )
-
-                    return job and job.get("status") == JobStatus.CANCELLED.value
+                    return bool(job and job.get("status") == JobStatus.CANCELLED.value)
                 except Exception:
                     return False
 
             def check_pause_callback(job_id_from_source: str) -> bool:
                 try:
                     job = self.job_service.get_job(job_id_from_source)
-                    return job and job.get("status") == JobStatus.PAUSED.value
+                    return bool(job and job.get("status") == JobStatus.PAUSED.value)
                 except Exception:
                     return False
 
@@ -135,10 +127,13 @@ class ExtractionService:
                 job_config=job_config,
                 auth_config=auth_config,
                 filters=enhanced_filters,
-                checkpoint_callback=checkpoint_callback,
+                api_service=api_service,
+                progress=progress,
+                checkpoint_interval=int(self.config.get("hubspot_checkpoint_interval_pages", 10)),
+                page_size=int(self.config.get("hubspot_page_size", 100)),
                 check_cancel_callback=check_cancel_callback,
                 check_pause_callback=check_pause_callback,
-                resume_from=resume_from,
+                page_delay_seconds=float(self.config.get("hubspot_page_delay_seconds", 0)),
             )
 
         except Exception as e:
@@ -148,6 +143,22 @@ class ExtractionService:
                 exc_info=True,
             )
             raise
+
+    def _load_resume_point(self, job_id: str) -> ExtractionProgress:
+        """Resume from the last committed checkpoint if it still has a cursor"""
+        latest_checkpoint = self.job_service.get_latest_checkpoint(job_id)
+        progress = ExtractionProgress.from_checkpoint(latest_checkpoint)
+        if progress.cursor:
+            self.logger.info(
+                "Resuming from checkpoint",
+                extra={
+                    "operation": "create_source",
+                    "job_id": job_id,
+                    "resume_page": progress.page_number + 1,
+                    "records_already_loaded": progress.records_processed,
+                },
+            )
+        return progress
 
     async def start_scan(self, request_config: Dict[str, Any]) -> Dict[str, Any]:
         """Start new data extraction scan"""
@@ -204,7 +215,7 @@ class ExtractionService:
             )
 
             # Database health check
-            if not check_database_health():
+            if not check_database_health().get("healthy"):
                 error_msg = "Database is not available"
                 self.logger.error(
                     "Database health check failed",
@@ -279,7 +290,14 @@ class ExtractionService:
                 pass
 
     async def _execute_scan(self, job_id: str):
-        """Execute the data extraction pipeline"""
+        """
+        Execute the deals extraction as a series of checkpointed batches.
+
+        Each batch reads up to N pages (HUBSPOT_CHECKPOINT_INTERVAL_PAGES), is
+        loaded into PostgreSQL by ``pipeline.run`` and only then committed as a
+        checkpoint. Pause, cancel and crash recovery all resume from the last
+        committed checkpoint.
+        """
         try:
             job = self.job_service.get_job(job_id, decrypt=True)
             if not job:
@@ -289,76 +307,171 @@ class ExtractionService:
                 )
                 return
 
-            self.logger.info(
-                "Starting pipeline execution",
-                extra={"operation": "execute_scan", "job_id": job_id},
-            )
-
             job_config = job["config"] or {}
             auth_config = job_config.get("auth", {})
             filters = job_config.get("filters", {})
-
-            # FIX: Create a proper job_config that includes organizationId for the data source
             enhanced_job_config = {
-                "organizationId": job[
-                    "organizationId"
-                ],  # Add organizationId from main job record
-                "scanId": job["scanId"],  # Add scanId
-                **job_config,  # Include all existing config
+                "organizationId": job["organizationId"],
+                "scanId": job["scanId"],
+                **job_config,
             }
 
-            # Create source and pipeline
-            source_functions = self.create_source_with_checkpoints(
-                auth_config=auth_config,
-                job_config=enhanced_job_config,
-                filters=filters,
-                job_id=job["scanId"],
-            )
-
             dataset_name = build_dataset_name(job["organizationId"])
+            metadata = dict(job.get("metadata") or {})
+            metadata.update(
+                {
+                    "dataset_name": dataset_name,
+                    "table_name": DEALS_TABLE,
+                    "pipeline_name": self.pipeline_name,
+                    "destination": "postgres",
+                    "source_type": self.source_type,
+                }
+            )
+            # Store the dataset up front so results/remove also work for
+            # paused or cancelled scans
+            self.job_service.update_job_status(
+                job_id, JobStatus.RUNNING, metadata=deep_serialize(metadata)
+            )
+            self.job_service.update_job_heartbeat(job_id)
+
+            api_service = self.create_hubspot_api_service()
+
+            # Fail fast with a clear message for bad tokens or missing scopes
+            validation = api_service.validate_credentials(auth_config.get("accessToken", ""))
+            if not validation.get("has_deals_read_scope"):
+                message = validation.get("message") or "HubSpot credential validation failed"
+                self.job_service.fail_job(
+                    job_id,
+                    message,
+                    {
+                        **metadata,
+                        "error_details": {
+                            "error_type": "HubSpotCredentialValidationError",
+                            "error_message": message,
+                            "status_code": validation.get("status_code"),
+                            "failed_at": datetime.now(timezone.utc).isoformat(),
+                            "failure_stage": "credential_validation",
+                        },
+                    },
+                )
+                log_security_event(
+                    self.logger,
+                    "hubspot_credential_validation_failed",
+                    severity="WARNING",
+                    job_id=job_id,
+                    status_code=validation.get("status_code"),
+                )
+                return
+
             pipeline = dlt.pipeline(
                 pipeline_name=self.pipeline_name,
                 destination=self.destination,
                 dataset_name=dataset_name,
             )
+            progress = self._load_resume_point(job_id)
+            page_size = int(filters.get("pageSize") or self.config.get("hubspot_page_size", 100))
 
-            self.job_service.update_job_heartbeat(job_id)
-
-            # Run pipeline
             self.logger.info(
                 "DLT pipeline started",
-                extra={"operation": "execute_scan", "job_id": job_id},
+                extra={
+                    "operation": "execute_scan",
+                    "job_id": job_id,
+                    "dataset_name": dataset_name,
+                    "resumed": progress.cursor is not None,
+                },
             )
 
-            pipeline.run(source_functions)
+            while True:
+                source = self.create_source_with_checkpoints(
+                    auth_config=auth_config,
+                    job_config=enhanced_job_config,
+                    filters=filters,
+                    job_id=job["scanId"],
+                    progress=progress,
+                    api_service=api_service,
+                )
+                load_info = pipeline.run(source)
 
-            # Get final record count
-            latest_checkpoint = self.job_service.get_latest_checkpoint(job_id)
-            records_extracted = (
-                latest_checkpoint.get("recordsProcessed", 0) if latest_checkpoint else 0
-            )
+                # The batch is now durably loaded - commit the checkpoint
+                progress.batches_completed += 1
+                if progress.finished:
+                    phase = PHASE_COMPLETED
+                elif progress.stop_reason == "paused":
+                    phase = PHASE_PAUSED
+                elif progress.stop_reason == "cancelled":
+                    phase = PHASE_CANCELLED
+                else:
+                    phase = PHASE_BATCH
+                self.job_service.save_checkpoint(
+                    job_id,
+                    progress.to_checkpoint(
+                        phase,
+                        page_size,
+                        load_ids=list(getattr(load_info, "loads_ids", []) or []),
+                        rate_limit=api_service.get_api_usage(),
+                    ),
+                )
+                self.job_service.update_job_heartbeat(job_id)
 
-            # Build completion metadata
+                self.logger.info(
+                    "Extraction batch committed",
+                    extra={
+                        "operation": "execute_scan",
+                        "job_id": job_id,
+                        "phase": phase,
+                        "pages_processed": progress.page_number,
+                        "records_processed": progress.records_processed,
+                    },
+                )
 
-            metadata = {
-                "pipeline_name": pipeline.pipeline_name,
-                "destination": "postgres",
-                "dataset_name": pipeline.dataset_name,
-                "source_type": self.source_type,
-                "extraction_summary": {"total_records": records_extracted},
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            }
-            current_job = self.job_service.get_job(job_id)
-            if current_job and current_job.get("status") == JobStatus.CANCELLED.value:
+                if progress.finished or progress.stop_reason:
+                    break
+
+            records_extracted = progress.records_processed
+            current_status = (self.job_service.get_job(job_id) or {}).get("status")
+
+            if current_status == JobStatus.CANCELLED.value:
                 self.logger.info(
                     "Job was cancelled during execution, keeping cancelled status",
-                    extra={"operation": "execute_scan", "job_id": job_id}
+                    extra={"operation": "execute_scan", "job_id": job_id,
+                           "records_loaded": records_extracted},
                 )
-                return  # Don't mark as completed
-            
-            # Only complete if not cancelled
-            self.job_service.complete_job(job_id, records_extracted, metadata)
+                return
 
+            if not progress.finished and (
+                current_status == JobStatus.PAUSED.value or progress.stop_reason == "paused"
+            ):
+                self.logger.info(
+                    "Job paused; progress saved for resume",
+                    extra={"operation": "execute_scan", "job_id": job_id,
+                           "next_page": progress.page_number + 1,
+                           "records_loaded": records_extracted},
+                )
+                log_business_event(
+                    self.logger, "scan_paused_checkpoint_saved",
+                    job_id=job_id, records_loaded=records_extracted,
+                )
+                return
+
+            indexes = self.db_service.ensure_deal_indexes(dataset_name, DEALS_TABLE)
+
+            metadata.update(
+                {
+                    "dataset_name": pipeline.dataset_name,
+                    "extraction_summary": {
+                        "total_records": records_extracted,
+                        "total_pages": progress.page_number,
+                        "batches": progress.batches_completed,
+                        "page_size": page_size,
+                        "resumed_from_page": progress.resumed_from_page,
+                        "truncated_at_page_limit": progress.stop_reason == "page_limit",
+                    },
+                    "table_record_counts": {DEALS_TABLE: records_extracted},
+                    "indexes": indexes,
+                    "rate_limit": api_service.get_api_usage(),
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             self.job_service.complete_job(job_id, records_extracted, metadata)
 
             self.logger.info(
@@ -378,32 +491,39 @@ class ExtractionService:
             )
 
         except Exception as e:
+            message = root_cause_message(e)
             self.logger.error(
                 "Scan execution failed",
-                extra={"operation": "execute_scan", "job_id": job_id, "error": str(e)},
+                extra={"operation": "execute_scan", "job_id": job_id, "error": message},
                 exc_info=True,
             )
 
+            current = self.job_service.get_job(job_id) or {}
             error_metadata = {
+                **(current.get("metadata") or {}),
                 "error_details": {
                     "error_type": type(e).__name__,
-                    "error_message": str(e),
+                    "error_message": message,
                     "failed_at": datetime.now(timezone.utc).isoformat(),
-                }
+                },
             }
-            self.job_service.fail_job(job_id, str(e), error_metadata)
+            self.job_service.fail_job(job_id, message, error_metadata)
 
-            log_business_event(self.logger, "scan_failed", job_id=job_id, error=str(e))
+            log_business_event(self.logger, "scan_failed", job_id=job_id, error=message)
 
     def pause_scan(self, scan_id: str) -> Dict[str, Any]:
         return self.job_service.pause_job(scan_id)
 
-    async def resume_scan(self, scan_id: str) -> Dict[str, Any]:
-        result = self.job_service.resume_job(scan_id)
-        if result.get("success"):
-            # Start background execution task
-            asyncio.create_task(self._execute_scan(scan_id))
-        return result
+    def resume_scan(self, scan_id: str) -> Dict[str, Any]:
+        """
+        Mark a paused or crashed scan as resuming. The caller schedules
+        execute_scan() in the background so the HTTP request returns at once.
+        """
+        return self.job_service.resume_job(scan_id)
+
+    async def execute_scan(self, scan_id: str):
+        """Run (or continue) the extraction for an existing scan"""
+        await self._execute_scan(scan_id)
 
     def get_scan_status(self, scan_id: str) -> Optional[Dict[str, Any]]:
         """Get scan status"""
@@ -518,7 +638,7 @@ class ExtractionService:
         return self.job_service.get_job_statistics(organization_id)
 
     def get_scan_results(
-        self, scan_id: str, table_name: str = "hubspot_deals", limit: int = 100, offset: int = 0
+        self, scan_id: str, table_name: str = DEALS_TABLE, limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """Get scan results with pagination"""
         try:
@@ -542,7 +662,7 @@ class ExtractionService:
                 }
 
             result = self.db_service.get_scan_data(
-                dataset_name, table_name, limit, offset
+                dataset_name, table_name, limit, offset, scan_id=scan_id
             )
 
             if result["success"]:
