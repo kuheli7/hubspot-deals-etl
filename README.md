@@ -13,6 +13,9 @@ The service structure was generated with the [Glynac-AI DLT Generator](https://g
 | API | `http://localhost:5200/api/v1`, Swagger UI at `http://localhost:5200/docs/` |
 | Ports | dev **5200**, stage **5201**, prod **5202** |
 
+## Why Flask
+The assignment requires the Glynac DLT Generator, which produces a Flask-RESTX service. The project manager confirmed Flask is acceptable for the final backend project. This and the other trade-offs (HubSpot mock, checkpointing, tenancy, task execution) are explained in [`docs/design-decisions.md`](docs/design-decisions.md).
+
 ## Features
 - **HubSpot API client** (`services/hubspot_api_service.py`): Bearer auth, cursor pagination, 150 requests / 10 s sliding-window rate limiter, `X-HubSpot-RateLimit-*` header guard, 429/5xx/network retries with back-off, typed errors, credential validation.
 - **DLT data source** (`services/data_source.py`): 28 deal properties converted to typed columns (`numeric(18,2)`, `timestamptz`, `boolean`, `bigint`), ETL metadata (`_extracted_at`, `_scan_id`, `_tenant_id`), `merge` on `id`.
@@ -161,6 +164,7 @@ The guideline's paths (`/scan/status/{id}`, `/scan/result/{id}`, `/scan/cancel/{
 | [`docs/database-schema.md`](docs/database-schema.md) | PostgreSQL tables (`CREATE TABLE`), type mapping, ETL metadata, indexes, multi-tenant isolation |
 | [`docs/api-documentation.md`](docs/api-documentation.md) | Service REST API with request/response examples and status codes |
 | [`docs/testing.md`](docs/testing.md) | Test strategy mapped to the GreenTree API test guideline |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | Design decisions and trade-offs (Flask vs Django, mock, checkpointing, tenancy, ...) |
 | [`docs/deal-properties.md`](docs/deal-properties.md) | Deal property catalogue served by `GET /crm/v3/properties/deals` (generated) |
 | [`mock_hubspot/README.md`](mock_hubspot/README.md) | HubSpot API mock: endpoints, behaviour matched, tokens, admin endpoints |
 | [`test-results/`](test-results/) | Evidence from the test runs |
