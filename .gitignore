@@ -1,0 +1,27 @@
+# Secrets - never commit real credentials
+.env
+.env.local
+.env.*.local
+*.token
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# DLT / runtime state
+.dlt/
+*.duckdb
+*.duckdb.wal
+
+# Logs (curated logs live in test-results/)
+logs/
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
