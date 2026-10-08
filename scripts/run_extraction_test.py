@@ -26,11 +26,13 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 from scripts.common import (  # noqa: E402
     PROJECT_ROOT, TEST_RESULTS, get_access_token, load_env, scrub, write_json, write_text,
 )
+from services.hubspot_api_service import HubSpotAPIService  # noqa: E402
 
 SERVICE = "http://localhost:5200"
 API = f"{SERVICE}/api/v1"
 TENANT = "org-hubspot-test"
 CHECKPOINT_TENANT = "org-hubspot-ckpt"
+CRASH_TENANT = "org-hubspot-crash"
 RUN_ID = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 TERMINAL = {"completed", "failed", "cancelled"}
 
@@ -123,7 +125,7 @@ def test_credentials(token: str) -> bool:
                  f"rate limit headers: {data.get('rate_limit')}")
 
 
-def test_full_extraction(token: str, env, expected: List[Dict]) -> Optional[str]:
+def test_full_extraction(token: str, env, expected: List[Dict], account_total: int) -> Optional[str]:
     scan_id = f"deals-e2e-{RUN_ID}"
     started = time.monotonic()
     response = call("POST", "/scan/start", json=scan_body(scan_id, TENANT, token))
@@ -134,7 +136,7 @@ def test_full_extraction(token: str, env, expected: List[Dict]) -> Optional[str]
     check("Scan completed", final.get("status") == "completed",
           f"timeline={' -> '.join(timeline)}, {duration}s, error={final.get('errorMessage')}")
 
-    results = call("GET", f"/results/{scan_id}/result", params={"tableName": "deals", "limit": 100})
+    results = call("GET", f"/results/{scan_id}/result", params={"tableName": "deals", "limit": 500})
     records = results.json().get("data", {}).get("records", []) if results.ok else []
     tables = call("GET", f"/results/{scan_id}/tables")
 
@@ -171,13 +173,15 @@ def test_full_extraction(token: str, env, expected: List[Dict]) -> Optional[str]
     found = sum(r["present"] for r in rows)
     check(f"All {len(expected)} test deals extracted", found == len(expected), f"{found}/{len(expected)} found")
     check("Extracted fields match HubSpot values", all_match)
-    check("recordsExtracted equals HubSpot deal count", final.get("recordsExtracted") == len(records),
-          f"recordsExtracted={final.get('recordsExtracted')}, rows={len(records)}")
+    total_rows = (results.json().get("data", {}).get("pagination") or {}).get("total") if results.ok else None
+    check("recordsExtracted equals the number of deals in HubSpot",
+          final.get("recordsExtracted") == account_total == total_rows,
+          f"HubSpot={account_total}, recordsExtracted={final.get('recordsExtracted')}, rows={total_rows}")
     check("API response time acceptable (< 120 s end-to-end)", duration < 120, f"{duration}s")
     return scan_id
 
 
-def test_database(env, scan_id: str, expected: List[Dict]) -> None:
+def test_database(env, scan_id: str, expected: List[Dict], account_total: int) -> None:
     schema = "hubspot_deals_" + TENANT.replace("-", "_")
     conn = db_connect(env)
     try:
@@ -212,7 +216,10 @@ def test_database(env, scan_id: str, expected: List[Dict]) -> None:
     lines += [f"| {r['id']} | {r['dealname']} | {r['amount']} | {r['dealstage']} | {r['closedate']} | {r['_tenant_id']} |" for r in rows]
     write_text("database_verification.md", "\n".join(lines) + "\n")
 
-    check("deals table holds one row per test deal", len(rows) == len(expected), f"{len(rows)} rows")
+    expected_ids = {d["id"] for d in expected}
+    check("deals table holds one row per HubSpot deal", len(rows) == account_total,
+          f"{len(rows)} rows for {account_total} deals in HubSpot")
+    check("All recorded test deal IDs are in the database", expected_ids <= {r["id"] for r in rows})
     check("No duplicate deal IDs", not dupes)
     check("amount stored as numeric(18,2)", types.get("amount", {}).get("data_type") == "numeric"
           and types["amount"].get("numeric_scale") == 2)
@@ -279,6 +286,62 @@ def test_checkpoint_resume(token: str, env, expected_count: int) -> None:
           and checkpoints[-1]["recordsProcessed"] == expected_count,
           [f"{c['phase']}@{c['pageNumber']}" for c in checkpoints])
 
+
+def test_crash_recovery(token: str, env, expected_count: int) -> None:
+    """Restart the container mid-scan, mark the job crashed, resume, verify nothing is lost"""
+    scan_id = f"deals-crash-{RUN_ID}"
+    schema = "hubspot_deals_" + CRASH_TENANT.replace("-", "_")
+    call("POST", "/scan/start", json=scan_body(scan_id, CRASH_TENANT, token,
+                                               {"pageSize": 1, "checkpointInterval": 1}))
+    before, _ = wait_for(scan_id, lambda d: latest_checkpoint(d).get("phase") == "deals_batch_committed"
+                         or d.get("status") in TERMINAL, timeout=120, interval=0.2)
+    proc = subprocess.run(["docker", "compose", "restart", "hubspot_deals_service_dev"],
+                          cwd=PROJECT_ROOT, capture_output=True, text=True)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        try:
+            if requests.get(f"{SERVICE}/health", timeout=3).ok:
+                break
+        except requests.RequestException:
+            pass
+        time.sleep(2)
+    after_restart = status_of(scan_id)
+    conn = db_connect(env)
+    try:
+        rows_after_crash = query(conn, f'SELECT count(*) AS n FROM "{schema}".deals WHERE _scan_id = %s', (scan_id,))[0]["n"]
+    except Exception:
+        conn.rollback()
+        rows_after_crash = 0
+
+    time.sleep(65)  # let the heartbeat go stale (minimum detection timeout is 1 minute)
+    detect = call("POST", "/maintenance/detect-crashed", params={"timeoutMinutes": 1})
+    crashed = status_of(scan_id)
+    resume = call("POST", f"/scan/{scan_id}/resume")
+    final, timeline = wait_for(scan_id, lambda d: d.get("status") in TERMINAL)
+    try:
+        final_rows = query(conn, f'SELECT count(*) AS n, count(DISTINCT id) AS distinct_ids FROM "{schema}".deals WHERE _scan_id = %s', (scan_id,))[0]
+        checkpoints = query(conn, 'SELECT phase, "pageNumber", "recordsProcessed", cursor, "createdAt" FROM job_checkpoints WHERE job_id = %s ORDER BY id', (scan_id,))
+    finally:
+        conn.close()
+
+    write_json("crash_recovery_test.json", {
+        "scan_id": scan_id, "tenant": CRASH_TENANT,
+        "checkpoint_before_crash": latest_checkpoint(before),
+        "restart_exit_code": proc.returncode,
+        "status_after_restart": after_restart.get("status"),
+        "rows_loaded_before_crash": rows_after_crash,
+        "detect_crashed_response": detect.json(),
+        "status_after_detection": crashed.get("status"),
+        "resume_response": {"status_code": resume.status_code, "body": resume.json()},
+        "final_status": final.get("status"), "final_records_extracted": final.get("recordsExtracted"),
+        "final_rows": final_rows, "checkpoints": checkpoints, "status_timeline_after_resume": timeline,
+    })
+    check("Interrupted scan detected as crashed", crashed.get("status") == "crashed",
+          f"{rows_after_crash} rows were committed before the container restart")
+    check("Crashed scan resumed from its checkpoint and completed without loss or duplicates",
+          resume.status_code == 202 and final.get("status") == "completed"
+          and final_rows["n"] == final_rows["distinct_ids"] == expected_count,
+          f"{final_rows['n']} rows, {final_rows['distinct_ids']} distinct, recordsExtracted={final.get('recordsExtracted')}")
 
 def test_edge_cases(token: str, completed_scan: str) -> None:
     cases = []
@@ -366,6 +429,8 @@ def write_report() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--restart-test", action="store_true", help="also restart the service container")
+    parser.add_argument("--crash-test", action="store_true",
+                        help="kill the service mid-scan, detect the crash and resume (takes ~2 minutes)")
     args = parser.parse_args()
 
     env = load_env()
@@ -375,13 +440,22 @@ def main() -> int:
         raise SystemExit("Run scripts/create_test_deals.py first (needs test-results/test_deals_created.json)")
     expected = __import__("json").loads(created.read_text(encoding="utf-8"))["deals"]
 
+    # Ground truth straight from HubSpot (the test account may hold other deals too)
+    hubspot = HubSpotAPIService(base_url=env.get("HUBSPOT_API_BASE_URL", "https://api.hubapi.com"))
+    account_total = sum(1 for _ in hubspot.iterate_deals(token, properties=["dealname"]))
+    report["hubspot_active_deals"] = account_total
+    report["page_delay_seconds"] = env.get("HUBSPOT_PAGE_DELAY_SECONDS", "0")
+    print(f"HubSpot account currently has {account_total} active deals")
+
     test_health()
     if not test_credentials(token):
         write_report()
         return 1
-    scan_id = test_full_extraction(token, env, expected)
-    test_database(env, scan_id, expected)
-    test_checkpoint_resume(token, env, len(expected))
+    scan_id = test_full_extraction(token, env, expected, account_total)
+    test_database(env, scan_id, expected, account_total)
+    test_checkpoint_resume(token, env, account_total)
+    if args.crash_test:
+        test_crash_recovery(token, env, account_total)
     test_edge_cases(token, scan_id)
     if args.restart_test:
         test_restart(scan_id)

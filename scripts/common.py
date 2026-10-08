@@ -12,6 +12,7 @@ os.environ.setdefault("LOKI_ENABLED", "false")
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEST_RESULTS = pathlib.Path(os.environ.get("TEST_RESULTS_DIR") or PROJECT_ROOT / "test-results")
 TOKEN_PATTERN = re.compile(r"pat-[a-z0-9]+-[0-9a-f-]{20,}", re.IGNORECASE)
+_SECRETS: list = []  # exact secret values to scrub, registered by get_access_token
 
 
 def load_env(path: pathlib.Path = PROJECT_ROOT / ".env") -> Dict[str, str]:
@@ -35,12 +36,16 @@ def get_access_token(env: Dict[str, str]) -> str:
             "HUBSPOT_ACCESS_TOKEN is not set. Put your private app token in .env "
             "(HUBSPOT_ACCESS_TOKEN=pat-...) - never commit it."
         )
+    if token not in _SECRETS:
+        _SECRETS.append(token)
     return token
 
 
 def scrub(value: Any) -> Any:
     """Remove anything that looks like a HubSpot private app token"""
     if isinstance(value, str):
+        for secret in _SECRETS:
+            value = value.replace(secret, "***REDACTED***")
         return TOKEN_PATTERN.sub("pat-***REDACTED***", value)
     if isinstance(value, list):
         return [scrub(v) for v in value]

@@ -873,8 +873,12 @@ class JobService:
                         "message": f"Cannot resume job with status: {current_status}",
                     }
 
-                # Check if there's a checkpoint to resume from
+                # Check if there's a checkpoint to resume from. A crash before the
+                # first batch was committed leaves none; such a job restarts from page 1
                 latest_checkpoint = self.get_latest_checkpoint(job_id)
+                if not latest_checkpoint and current_status == JobStatus.CRASHED.value:
+                    latest_checkpoint = {"pageNumber": 0, "recordsProcessed": 0,
+                                         "phase": "restart_from_beginning", "cursor": None}
                 if not latest_checkpoint:
                     self.logger.warning(
                         "Cannot resume job: no checkpoint found",

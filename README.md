@@ -77,10 +77,10 @@ Open **http://localhost:5200/docs/** for the interactive API documentation.
 ## Testing
 ```bash
 pytest                                   # unit tests (HubSpot mocked) - no network needed
-python scripts/run_extraction_test.py --restart-test   # end-to-end against the real test account
+python scripts/run_extraction_test.py --restart-test --crash-test   # end-to-end against the real test account
 python scripts/export_deal_properties.py # full deal property list -> docs/deal-properties.md
 ```
-`run_extraction_test.py` checks health and docs, validates the token, extracts and verifies all 5 test deals field by field, inspects the PostgreSQL schema and indexes, pauses and resumes a scan with 1-deal pages to prove checkpointing, runs the edge cases (invalid token, malformed JSON, injection, unknown IDs, duplicates, wrong-state cancels) and restarts the container. Everything is written to [`test-results/`](test-results/).
+`run_extraction_test.py` checks health and docs, validates the token, extracts and verifies all 5 test deals field by field, inspects the PostgreSQL schema and indexes, pauses and resumes a scan with 1-deal pages to prove checkpointing, runs the edge cases (invalid token, malformed JSON, injection, unknown IDs, duplicates, wrong-state cancels), restarts the container mid-scan to prove crash recovery (`--crash-test`) and restarts it again to show scans survive (`--restart-test`). Everything is written to [`test-results/`](test-results/).
 
 Offline integration testing: `python tests/mock_hubspot_server.py --port 5299` and set `HUBSPOT_API_BASE_URL=http://host.docker.internal:5299` in `.env`.
 
