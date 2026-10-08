@@ -1,0 +1,34 @@
+# Runs the service against the local HubSpot API mock instead of api.hubapi.com.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
+#
+# or set COMPOSE_FILE in .env (see .env.example) so plain `docker compose` uses both files.
+services:
+  hubspot_mock:
+    build:
+      context: .
+      dockerfile: mock_hubspot/Dockerfile
+    container_name: hubspot_deals_hubspot_mock
+    restart: unless-stopped
+    environment:
+      - MOCK_HUBSPOT_PORT=5299
+      - MOCK_HUBSPOT_RATE_LIMIT=${MOCK_HUBSPOT_RATE_LIMIT:-150}
+      - MOCK_HUBSPOT_LOAD_DEALS=${MOCK_HUBSPOT_LOAD_DEALS:-2500}
+    ports:
+      - "5299:5299"
+    volumes:
+      - hubspot_mock_data:/data
+    networks:
+      - hubspot_deals_network
+
+  hubspot_deals_service_dev:
+    environment:
+      - HUBSPOT_API_BASE_URL=http://hubspot_mock:5299
+    depends_on:
+      hubspot_mock:
+        condition: service_healthy
+
+volumes:
+  hubspot_mock_data:
+    name: hubspot_deals_hubspot_mock_data
+    driver: local
