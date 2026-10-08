@@ -40,14 +40,14 @@ Any other token gets HubSpot's 401. Data is persisted in `/data/hubspot_mock_sta
 | `GET /account-info/v3/details` | - | `portalId`, `accountType: DEVELOPER_TEST`, currency, time zone |
 | `GET /account-info/v3/api-usage/daily/private-apps` | - | daily usage vs. limit |
 
-### Response conventions matched
+### Response conventions
 - **Object shape:** `{"id", "properties", "createdAt", "updatedAt", "archived"[, "archivedAt"]}`.
 - **Property values are strings or `null`.** Requested but empty properties come back as `null`; unknown requested names are omitted.
 - **Default properties:** without `properties`, the list returns `amount, closedate, createdate, dealname, dealstage, hs_lastmodifieddate, hs_object_id, pipeline`. `createdate`, `hs_lastmodifieddate` and `hs_object_id` are always included.
 - **HubSpot-calculated properties** are maintained on every write: `hs_object_id`, `hs_lastmodifieddate`, `hs_deal_stage_probability`, `hs_is_closed`, `hs_is_closed_won`, `hs_is_closed_lost`, `hs_projected_amount`, `amount_in_home_currency`, `hs_closed_amount`, `days_to_close`.
 - **Results are ordered by ID**, and `after` is the ID where the next page starts.
 
-### Errors and limits matched
+### Errors and limits
 | Situation | Status | Body |
 |---|---|---|
 | Missing or unknown token | 401 | `{"status":"error","message":"Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview","correlationId":"…","category":"INVALID_AUTHENTICATION"}`. The message is the same text `api.hubapi.com` returned for an invalid token during development |
@@ -71,8 +71,30 @@ These do not exist in HubSpot; the resilience tests use them to provoke situatio
 | `DELETE /__mock/faults` | clear queued failures |
 | `POST /__mock/reset` | `{"account": "test"}` deletes all deals of an account |
 
+## How faithful is it?
+Behaviour falls into two groups. Neither has been run against a real HubSpot account with deals, because that account could not be created.
+
+**Verified against HubSpot**
+| Behaviour | Source |
+|---|---|
+| Endpoint paths and the `properties`, `propertiesWithHistory` and `associations` query parameters | [Deals API guide (CRM v3)](https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/deals/guide) |
+| `X-HubSpot-RateLimit-*` headers, 429 `policyName` values (`TEN_SECONDLY_ROLLING`, `DAILY`), burst and daily limit figures | [API usage guidelines](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines) |
+| 401 message text for an invalid token | live response from `api.hubapi.com` during development |
+| Default deal property labels and groups | [HubSpot's default deal properties](https://knowledge.hubspot.com/properties/hubspots-default-deal-properties) |
+| Scopes `crm.objects.deals.read` / `crm.objects.deals.write` | Deals API guide |
+
+**Modelled on HubSpot's conventions, not verified against a live account**
+- Default `limit` of 10, and capping (rather than rejecting) values above 100
+- The `after` cursor format and ID ordering
+- Which properties are returned by default and which are always returned
+- Bodies of the 403 `MISSING_SCOPES`, 400 `VALIDATION_ERROR` and 404 `OBJECT_NOT_FOUND` errors
+- Which properties HubSpot calculates, and how
+- Internal names of properties beyond the core deal fields, and so the catalogue behind `docs/deal-properties.md`
+
+Running `scripts/run_extraction_test.py` and `scripts/export_deal_properties.py` against a real HubSpot account (see `test-results/hubspot-account-setup.md`) would confirm the modelled behaviour.
+
 ## Not implemented
 - Search (`POST /crm/v3/objects/deals/search`), batch endpoints and association data. The ETL does not use them.
 - OAuth, multiple pipelines, custom properties and multi-currency.
 
-Contract tests in `tests/test_mock_hubspot_contract.py` run the real `HubSpotAPIService` against the mock to keep it faithful to the behaviour above.
+Contract tests in `tests/test_mock_hubspot_contract.py` run the real `HubSpotAPIService` against the mock, so the mock and the client cannot drift apart unnoticed.

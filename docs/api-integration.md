@@ -39,7 +39,7 @@ Authorization: Bearer pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 Accept: application/json
 ```
 
-Private app tokens are created in HubSpot under **Settings → Integrations → Private Apps** (legacy private apps) and do not expire, but can be rotated or revoked. They are tied to one HubSpot account.
+Private app tokens are created in HubSpot under **Settings → Integrations → Private Apps** (legacy private apps) and can be rotated or revoked at any time. They are tied to one HubSpot account.
 
 ### **Required Scopes**
 - **`crm.objects.deals.read`**: read deals, deal properties and deal pipelines. This is the only scope the extraction service needs.
@@ -123,7 +123,7 @@ Accept: application/json
 - **All property values are strings** (or `null`), including numbers, booleans and dates. `transform_deal()` converts them to typed values (see [Deal Properties](#-deal-properties)).
 - **Pagination is cursor-based.** `paging` is absent on the last page; that is the stop condition. `paging.next.after` is opaque and must be passed back unchanged.
 - `createdAt`, `updatedAt`, `archived` (and `archivedAt` for archived deals) are object-level fields outside `properties`.
-- Deal stages and pipelines are returned as **internal IDs** (`presentationscheduled`, `default`), not labels. Stages created in the HubSpot UI get numeric IDs; use `GET /crm/v3/pipelines/deals` to map IDs to labels.
+- Deal stages and pipelines are returned as **internal IDs** (`presentationscheduled`, `default`), not labels. Stages created in the HubSpot UI get generated IDs rather than readable names; use `GET /crm/v3/pipelines/deals` to map IDs to labels.
 
 **Rate Limit**: shared with all other API calls of the private app - see [Rate Limits](#-rate-limits).
 
@@ -235,7 +235,7 @@ POST /api/v1/scan/start
 Committing the checkpoint **after** the batch is loaded means the stored cursor never points past data that is not yet in PostgreSQL. A crash, pause or cancel therefore resumes without gaps, and the `merge` write disposition makes re-reading a page harmless.
 
 ### 🔁 Incremental extraction (future option)
-The list endpoint cannot filter by date, so each scan reads all deals. For large accounts an incremental mode could use `POST /crm/v3/objects/deals/search` with a `hs_lastmodifieddate GTE <last run>` filter. HubSpot's search endpoints have their own stricter limits, return at most 10,000 results per query and do not send the rate-limit headers, so the list endpoint was preferred for full extractions.
+The list endpoint cannot filter by date, so each scan reads all deals. For large accounts an incremental mode could use `POST /crm/v3/objects/deals/search` with a `hs_lastmodifieddate GTE <last run>` filter. HubSpot's search endpoints have their own stricter limits and do not send the rate-limit headers (per the usage guidelines), and they cap the number of results per query, so the list endpoint was preferred for full extractions.
 
 ---
 
@@ -514,6 +514,20 @@ Switching between the mock and HubSpot needs no code changes:
 | Access token in scan requests | `pat-mock-test-account-deals` | private app token `pat-...` |
 
 The mock also offers admin endpoints (`/__mock/faults`, `/__mock/config`) to inject 429/5xx responses, latency and stricter quotas. `scripts/run_mock_resilience_test.py` uses them to test the retry, back-off and resume behaviour described above.
+
+### Verification status of the HubSpot facts in this document
+- **Checked against HubSpot during this project:**
+  - endpoint paths and query parameters (`properties`, `propertiesWithHistory`, `associations`) and scopes ([Deals API guide](https://developers.hubspot.com/docs/api-reference/legacy/crm/objects/deals/guide))
+  - rate-limit tiers, headers and 429 policies ([usage guidelines](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines))
+  - default property labels ([knowledge base](https://knowledge.hubspot.com/properties/hubspots-default-deal-properties))
+  - the 401 message (live API)
+- **Based on HubSpot's documented conventions and general API knowledge, not yet confirmed against a live account:**
+  - `limit` default 10 and maximum 100
+  - the default property set returned
+  - default pipeline stage IDs
+  - internal names of non-core properties
+  - token lifetime
+  - search API limits
 
 ---
 

@@ -1,6 +1,6 @@
 # Test results
 
-The files in this folder are the output of the test runs on 2026-10-08/09 (UTC). They were produced against the **local HubSpot API mock** ([`mock_hubspot/`](../mock_hubspot/README.md)), with the project manager's approval, because the HubSpot developer account required ID verification (see [`hubspot-account-setup.md`](hubspot-account-setup.md)). Nothing here was edited by hand. Tokens are scrubbed.
+The files in this folder are the output of the test runs on 2026-10-08/09 (UTC). They were produced against the **local HubSpot API mock** ([`mock_hubspot/`](../mock_hubspot/README.md)), with the project manager's approval, because the HubSpot developer account required ID verification (see [`hubspot-account-setup.md`](hubspot-account-setup.md)). All files were written by the test scripts. The exceptions are `docker_compose_ps.txt`, which was regenerated with `docker compose ps` after the run to fix a character-encoding problem, and the two hand-written summaries (`README.md`, `hubspot-account-setup.md`). Tokens are scrubbed. Which HubSpot behaviours the mock verifies versus models is listed in [`mock_hubspot/README.md`](../mock_hubspot/README.md#how-faithful-is-it).
 
 ## Summary
 | Suite | Result | Evidence |
