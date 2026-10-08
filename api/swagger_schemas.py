@@ -1,5 +1,5 @@
 """
-Swagger/OpenAPI schema definitions for HubSpot User Extraction API
+Swagger/OpenAPI schema definitions for the HubSpot Deals Extraction API
 """
 from flask_restx import fields, Api
 
@@ -9,58 +9,63 @@ def register_models(api: Api):
     # Authentication model
     auth_model = api.model('Auth', {
         'accessToken': fields.String(
-            required=True, 
-            description='API access token for authentication', 
-        )
-    })
-
-    # Date range model
-    date_range_model = api.model('DateRange', {
-        'startDate': fields.String(
-            description='Start date (YYYY-MM-DD)', 
-            example='2024-01-01'
-        ),
-        'endDate': fields.String(
-            description='End date (YYYY-MM-DD)',
-            example='2024-12-31'
+            required=True,
+            description='HubSpot private app access token (needs crm.objects.deals.read)',
+            example='pat-na1-your-private-app-token'
         )
     })
 
     # Filters model
     filters_model = api.model('Filters', {
         'properties': fields.List(
-            fields.String, 
-            description='User properties to extract',
-            example=['id', 'email', 'firstName', 'lastName', 'roleId', 'createdAt']
+            fields.String,
+            description='Extra deal properties to extract in addition to the defaults',
+            example=['hs_manual_forecast_category', 'hs_tcv']
         ),
-        'includeArchived': fields.Boolean(
-            description='Include archived users',
+        'archived': fields.Boolean(
+            description='Extract archived deals instead of active deals',
             default=False,
             example=False
         ),
-        'dateRange': fields.Nested(date_range_model, description='Date range filter')
+        'pageSize': fields.Integer(
+            description='Deals per HubSpot API page (1-100, default 100)',
+            example=100
+        ),
+        'checkpointInterval': fields.Integer(
+            description='Commit a checkpoint every N pages (default 10)',
+            example=10
+        )
     })
 
     # Scan configuration model
     scan_config_model = api.model('ScanConfig', {
         'scanId': fields.String(
-            required=True, 
-            description='Unique identifier for the scan',
-            example='hubspot-users-scan-2025-001'
+            required=True,
+            description='Unique identifier for the scan (letters, numbers, _ and -)',
+            example='hubspot-deals-scan-001'
         ),
         'organizationId': fields.String(
-            required=True, 
-            description='Organization identifier',
+            required=True,
+            description='Tenant identifier; each tenant gets its own PostgreSQL schema',
             example='org-12345'
         ),
         'type': fields.List(
-            fields.String, 
+            fields.String,
             required=True,
-            description='Type of scan (must be "user")',
-            example=['user']
+            description='Type of scan (must be "deal")',
+            example=['deal']
         ),
         'auth': fields.Nested(auth_model, required=True),
         'filters': fields.Nested(filters_model, description='Scan filters')
+    })
+
+    # Credential validation request model
+    validate_credentials_model = api.model('ValidateCredentialsRequest', {
+        'accessToken': fields.String(
+            required=True,
+            description='HubSpot private app access token to check',
+            example='pat-na1-your-private-app-token'
+        )
     })
 
     # Scan request model
@@ -82,7 +87,7 @@ def register_models(api: Api):
         'type': fields.String(description='Scan type'),
         'status': fields.String(
             description='Scan status', 
-            enum=['pending', 'running', 'completed', 'failed', 'cancelled', 'crashed', 'resuming']
+            enum=['pending', 'running', 'paused', 'resuming', 'completed', 'failed', 'cancelled', 'crashed']
         ),
         'startTime': fields.String(description='Scan start time (ISO format)'),
         'endTime': fields.String(description='Scan end time (ISO format)'),
@@ -109,20 +114,6 @@ def register_models(api: Api):
     scan_list_model = api.model('ScanList', {
         'scans': fields.List(fields.Nested(scan_status_model)),
         'pagination': fields.Nested(pagination_model)
-    })
-
-    # User property model
-    user_property_model = api.model('UserProperty', {
-        'name': fields.String(description='Property name'),
-        'label': fields.String(description='Property label'),
-        'type': fields.String(description='Property type'),
-        'description': fields.String(description='Property description')
-    })
-
-    # User properties model
-    user_properties_model = api.model('UserProperties', {
-        'standard': fields.List(fields.Nested(user_property_model)),
-        'filters': fields.Raw(description='Available filters')
     })
 
     # Table info model
@@ -218,7 +209,7 @@ def register_models(api: Api):
     # Return models for use in routes
     return {
         'auth_model': auth_model,
-        'date_range_model': date_range_model,
+        'validate_credentials_model': validate_credentials_model,
         'filters_model': filters_model,
         'scan_config_model': scan_config_model,
         'scan_request_model': scan_request_model,
@@ -226,8 +217,6 @@ def register_models(api: Api):
         'checkpoint_info_model': checkpoint_info_model,
         'pagination_model': pagination_model,
         'scan_list_model': scan_list_model,
-        'user_property_model': user_property_model,
-        'user_properties_model': user_properties_model,
         'table_info_model': table_info_model,
         'tables_response_model': tables_response_model,
         'results_response_model': results_response_model,

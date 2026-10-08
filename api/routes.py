@@ -15,6 +15,7 @@ from .schemas import (
     validate_scan_request, 
     validate_pagination_params, 
     validate_cleanup_request,
+    validate_credentials_request,
     ScanConfig
 )
 from services.extraction_service import ExtractionService
@@ -25,6 +26,16 @@ from loki_logger import get_logger, log_business_event, log_security_event
 # Initialize logging
 logger = get_logger(__name__)
 executor = ThreadPoolExecutor(max_workers=4)
+
+
+def result_status_code(message: str) -> int:
+    """Map a service failure message to an HTTP status code"""
+    text = (message or '').lower()
+    if 'not found' in text:
+        return 404
+    if 'not completed' in text:
+        return 409
+    return 400
 
 def create_api():
     """Create and configure the Flask-RESTX API"""
@@ -44,13 +55,13 @@ def create_api():
     
     # Create namespaces
     scan_ns = Namespace('scan', description='Scan operations')
-    users_ns = Namespace('users', description='User-related operations')
+    auth_ns = Namespace('auth', description='HubSpot credential checks')
     results_ns = Namespace('results', description='Results retrieval operations')
     pipeline_ns = Namespace('pipeline', description='Pipeline operations')
     maintenance_ns = Namespace('maintenance', description='Maintenance operations')
     
     api.add_namespace(scan_ns)
-    api.add_namespace(users_ns)
+    api.add_namespace(auth_ns)
     api.add_namespace(results_ns)
     api.add_namespace(pipeline_ns)
     api.add_namespace(maintenance_ns)
@@ -75,13 +86,13 @@ def create_api():
                     }
                 )
                 
-                json_data = request.get_json()
-                if not json_data:
-                    logger.warning("No JSON data provided", extra={'request_id': request_id})
+                json_data = request.get_json(silent=True)
+                if not json_data or not isinstance(json_data, dict):
+                    logger.warning("Missing or malformed JSON body", extra={'request_id': request_id})
                     return {
                         "success": False,
-                        "message": "No JSON data provided",
-                        "error": "No JSON data provided"
+                        "message": "Request body must be a valid JSON object",
+                        "error": "Request body must be a valid JSON object"
                     }, 400
 
                 # Validate request
@@ -210,7 +221,7 @@ def create_api():
 
     @scan_ns.route('/<string:scan_id>/cancel')
     class CancelScan(Resource):
-        @scan_ns.response(400, 'Cannot cancel scan')
+        @scan_ns.response(409, 'Scan cannot be cancelled in its current state')
         @scan_ns.response(404, 'Scan not found')
         @scan_ns.response(500, 'Internal server error')
         def post(self, scan_id):
@@ -228,6 +239,7 @@ def create_api():
                     log_business_event(logger, "scan_cancelled", scan_id=scan_id)
                     return result
                 else:
+                    status_code = 404 if "not found" in result['message'].lower() else 409
                     logger.warning(
                         "Scan cancellation failed",
                         extra={
@@ -240,7 +252,7 @@ def create_api():
                         "success": False,
                         "message": result['message'],
                         "error": result['message']
-                    }, 400
+                    }, status_code
 
             except Exception as e:
                 logger.error(
@@ -380,7 +392,7 @@ def create_api():
                     )
                     return {"success": True, "data": result['data']}
                 else:
-                    status_code = 404 if "not found" in result['message'].lower() else 400
+                    status_code = result_status_code(result['message'])
                     logger.warning(
                         "Tables not available",
                         extra={
@@ -409,18 +421,19 @@ def create_api():
 
     @results_ns.route('/<string:scan_id>/result')
     class GetScanResults(Resource):
-        @results_ns.param('tableName', 'Name of the table to query (default: users)', default='users')
+        @results_ns.param('tableName', 'Name of the table to query (default: deals)', default='deals')
         @results_ns.param('limit', f'Number of records per page (max {api_config["max_results_limit"]})', type=int, default=api_config['default_results_limit'])
         @results_ns.param('offset', 'Number of records to skip', type=int, default=0)
         @results_ns.response(404, 'Scan not found')
-        @results_ns.response(400, 'Scan not completed or invalid parameters')
+        @results_ns.response(400, 'Invalid parameters')
+        @results_ns.response(409, 'Scan not completed yet')
         @results_ns.response(500, 'Internal server error')
         def get(self, scan_id):
             """Get scan results with pagination and table selection"""
             request_id = getattr(g, 'request_id', str(uuid.uuid4()))
             
             try:
-                table_name = request.args.get('tableName', 'users')
+                table_name = request.args.get('tableName', 'deals')
                 
                 # Validate pagination
                 try:
@@ -455,7 +468,7 @@ def create_api():
                     )
                     return {"success": True, "data": result['data']}
                 else:
-                    status_code = 404 if "not found" in result['message'].lower() else 400
+                    status_code = result_status_code(result['message'])
                     logger.warning(
                         "Results not available",
                         extra={
@@ -528,7 +541,7 @@ def create_api():
             request_id = getattr(g, 'request_id', str(uuid.uuid4()))
             
             try:
-                json_data = request.get_json() or {}
+                json_data = request.get_json(silent=True) or {}
                 
                 try:
                     days_old = validate_cleanup_request(json_data)
@@ -829,6 +842,126 @@ def create_api():
                     "error": str(e)
                 }, 500
 
+
+    @scan_ns.route('/<string:scan_id>/resume')
+    class ResumeScan(Resource):
+        @scan_ns.response(202, 'Scan is resuming from its last checkpoint')
+        @scan_ns.response(404, 'Scan not found')
+        @scan_ns.response(409, 'Scan cannot be resumed in its current state')
+        @scan_ns.response(500, 'Internal server error')
+        def post(self, scan_id):
+            """Resume a paused or crashed scan from its last committed checkpoint"""
+            request_id = getattr(g, 'request_id', str(uuid.uuid4()))
+
+            try:
+                existing = extraction_service.get_scan_status(scan_id)
+                if not existing:
+                    return {
+                        "success": False,
+                        "message": f"No scan found with ID: {scan_id}",
+                        "error": f"No scan found with ID: {scan_id}"
+                    }, 404
+
+                result = extraction_service.resume_scan(scan_id)
+
+                if result.get('success'):
+                    executor.submit(asyncio.run, extraction_service.execute_scan(scan_id))
+                    logger.info(
+                        "Scan resume accepted",
+                        extra={'request_id': request_id, 'scan_id': scan_id}
+                    )
+                    log_business_event(logger, "scan_resume_requested", scan_id=scan_id)
+                    return result, 202
+
+                logger.warning(
+                    "Scan resume rejected",
+                    extra={
+                        'request_id': request_id,
+                        'scan_id': scan_id,
+                        'reason': result.get('message')
+                    }
+                )
+                status_code = 404 if "not found" in result['message'].lower() else 409
+                return {
+                    "success": False,
+                    "message": result['message'],
+                    "error": result['message']
+                }, status_code
+
+            except Exception as e:
+                logger.error(
+                    "Error resuming scan",
+                    extra={'request_id': request_id, 'scan_id': scan_id, 'error': str(e)},
+                    exc_info=True
+                )
+                return {
+                    "success": False,
+                    "message": f"Failed to resume scan: {str(e)}",
+                    "error": str(e)
+                }, 500
+
+    @auth_ns.route('/validate')
+    class ValidateCredentials(Resource):
+        @auth_ns.expect(models['validate_credentials_model'])
+        @auth_ns.response(200, 'Token is valid and can read deals')
+        @auth_ns.response(400, 'Invalid request data')
+        @auth_ns.response(401, 'HubSpot rejected the token')
+        @auth_ns.response(403, 'Token is missing the crm.objects.deals.read scope')
+        def post(self):
+            """Check a HubSpot access token without starting a scan"""
+            request_id = getattr(g, 'request_id', str(uuid.uuid4()))
+
+            try:
+                json_data = request.get_json(silent=True)
+                if not json_data:
+                    return {
+                        "success": False,
+                        "message": "No JSON data provided",
+                        "error": "No JSON data provided"
+                    }, 400
+                try:
+                    access_token = validate_credentials_request(json_data)
+                except ValidationError as err:
+                    return {
+                        "success": False,
+                        "message": f"Validation error: {err.messages}",
+                        "error": f"Validation error: {err.messages}",
+                        "validation_errors": err.messages
+                    }, 400
+
+                result = extraction_service.validate_credentials(access_token)
+
+                if result.get('has_deals_read_scope'):
+                    return {"success": True, "data": result}, 200
+
+                status_code = result.get('status_code')
+                if status_code not in (401, 403, 429):
+                    status_code = 502 if status_code and status_code >= 500 else 401
+                log_security_event(
+                    logger,
+                    "hubspot_token_validation_failed",
+                    severity='WARNING',
+                    request_id=request_id,
+                    status_code=result.get('status_code')
+                )
+                return {
+                    "success": False,
+                    "message": result.get('message'),
+                    "error": result.get('message'),
+                    "data": result
+                }, status_code
+
+            except Exception as e:
+                logger.error(
+                    "Error validating credentials",
+                    extra={'request_id': request_id, 'error': str(e)},
+                    exc_info=True
+                )
+                return {
+                    "success": False,
+                    "message": f"Failed to validate credentials: {str(e)}",
+                    "error": str(e)
+                }, 500
 
     logger.info(
         "API created successfully",
