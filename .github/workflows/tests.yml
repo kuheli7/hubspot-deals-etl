@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CONFIG_PASSWORD: ci-config-password
+      COORDINATOR_KEY: ci-coordinator-key
     steps:
       - uses: actions/checkout@v4
 

@@ -107,6 +107,7 @@ services:
       - FLASK_DEBUG=true
       - SECRET_KEY=dev-secret-key-change-in-production
       - CONFIG_PASSWORD=${CONFIG_PASSWORD:?CONFIG_PASSWORD must be set (see .env.example)}
+      - COORDINATOR_KEY=${COORDINATOR_KEY:?COORDINATOR_KEY must be set (see .env.example)}
       - PORT=5200
       - HOST=0.0.0.0
       
@@ -193,6 +194,7 @@ services:
       - FLASK_DEBUG=false
       - SECRET_KEY=stage-secret-key-change-in-production
       - CONFIG_PASSWORD=${CONFIG_PASSWORD:?CONFIG_PASSWORD must be set (see .env.example)}
+      - COORDINATOR_KEY=${COORDINATOR_KEY:?COORDINATOR_KEY must be set (see .env.example)}
       - PORT=5201
       - HOST=0.0.0.0
       
@@ -278,6 +280,7 @@ services:
       - FLASK_DEBUG=false
       - SECRET_KEY=prod-secret-key-change-in-production
       - CONFIG_PASSWORD=${CONFIG_PASSWORD:?CONFIG_PASSWORD must be set (see .env.example)}
+      - COORDINATOR_KEY=${COORDINATOR_KEY:?COORDINATOR_KEY must be set (see .env.example)}
       - PORT=5202
       - HOST=0.0.0.0
       

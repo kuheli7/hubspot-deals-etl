@@ -27,6 +27,7 @@ from scripts.common import (  # noqa: E402
     PROJECT_ROOT, TEST_RESULTS, get_access_token, load_env, scrub, write_json, write_text,
 )
 from services.hubspot_api_service import HubSpotAPIService  # noqa: E402
+from coordinator_auth import CoordinatorAuth  # noqa: E402
 
 SERVICE = "http://localhost:5200"
 API = f"{SERVICE}/api/v1"
@@ -46,8 +47,9 @@ def check(name: str, passed: bool, detail: Any = None) -> bool:
 
 
 def call(method: str, path: str, **kwargs) -> requests.Response:
+    """Call the service API, HMAC-signed with COORDINATOR_KEY from .env"""
     url = path if path.startswith("http") else f"{API}{path}"
-    return requests.request(method, url, timeout=60, **kwargs)
+    return requests.request(method, url, timeout=60, auth=CoordinatorAuth(load_env().get("COORDINATOR_KEY", "")), **kwargs)
 
 
 def scan_body(scan_id: str, tenant: str, token: str, filters: Optional[Dict] = None) -> Dict:

@@ -19,6 +19,9 @@ class Config:
     ENCRYPTION_PASSWORD = os.environ.get('CONFIG_PASSWORD')
     ENCRYPTION_ALGORITHM = os.environ.get('CONFIG_ENCRYPTION_ALGORITHM', 'SHA512')
 
+    # Shared secret callers use to HMAC-sign every /api/v1 request (see coordinator_auth.py)
+    COORDINATOR_KEY = os.environ.get('COORDINATOR_KEY')
+
     # Server settings
     HOST = os.environ.get('HOST', '0.0.0.0')
     PORT = int(os.environ.get('PORT', 5000))
@@ -127,6 +130,11 @@ class Config:
             raise ValueError(
                 "CONFIG_PASSWORD is not set. It is the key that encrypts the HubSpot "
                 "tokens stored with each scan - set it in the environment or in .env."
+            )
+        if not cls.COORDINATOR_KEY:
+            raise ValueError(
+                "COORDINATOR_KEY is not set. It is the HMAC key every /api/v1 request "
+                "must be signed with - set it in the environment or in .env."
             )
 
     @classmethod

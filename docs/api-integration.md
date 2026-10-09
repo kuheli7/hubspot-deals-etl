@@ -459,10 +459,9 @@ curl -s "https://api.hubapi.com/crm/v3/objects/deals?limit=1" \
 ```
 
 ### **Test authentication through the service**
+The service API itself requires an HMAC-signed request (see [api-documentation.md](api-documentation.md#-authentication)):
 ```bash
-curl -s -X POST http://localhost:5200/api/v1/auth/validate \
-  -H "Content-Type: application/json" \
-  -d "{\"accessToken\": \"$HUBSPOT_ACCESS_TOKEN\"}"
+python scripts/signed_request.py POST /auth/validate "{\"accessToken\": \"$HUBSPOT_ACCESS_TOKEN\"}"
 ```
 
 ### **List deal properties / pipelines**

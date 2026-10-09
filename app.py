@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from config import get_config
 from api.routes import create_api
+from coordinator_auth import verify_request
 from loki_logger import configure_app_logging
 from models.database import initialize_database, check_database_health
 from services.job_service import JobService
@@ -68,6 +69,11 @@ def create_app(config_name: str = None) -> Flask:
     # Initialize database tables
     initialize_database()
     
+    # Every /api/v1 request must be HMAC-signed with the coordinator key
+    @app.before_request
+    def require_coordinator_signature():
+        return verify_request(config.COORDINATOR_KEY, config.API_PREFIX)
+
     api = create_api()
     # Initialize Flask-RESTX API
     api.init_app(app)

@@ -6,12 +6,15 @@ extracted deal rows (0, 3 and 250 records). The service API is then exercised
 in-process with Flask's test client, with no HubSpot dependency. Every test
 reseeds, so tests are independent of each other.
 """
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import pytest
+from flask.testing import EnvironBuilder, FlaskClient
 
+from coordinator_auth import SIGNATURE_HEADER, TIMESTAMP_HEADER, sign
 from tests.conftest import TEST_DB
 
 psycopg2 = pytest.importorskip("psycopg2")
@@ -63,9 +66,37 @@ def app():
     return flask_app
 
 
+class SignedClient(FlaskClient):
+    """Test client that HMAC-signs every request with COORDINATOR_KEY, like a real caller"""
+
+    def open(self, *args, **kwargs):
+        headers = dict(kwargs.pop("headers", None) or {})
+        # Build the request once only to see the exact path and body that will be sent
+        builder = EnvironBuilder(self.application, *args, **kwargs)
+        try:
+            environ = builder.get_environ()
+            body = environ["wsgi.input"].read()
+        finally:
+            builder.close()
+        path = environ["PATH_INFO"].encode("latin-1").decode("utf-8", "replace")
+        if environ.get("QUERY_STRING"):
+            path += "?" + environ["QUERY_STRING"]
+        timestamp = str(int(time.time()))
+        headers[TIMESTAMP_HEADER] = timestamp
+        headers[SIGNATURE_HEADER] = sign(
+            os.environ["COORDINATOR_KEY"], timestamp, environ["REQUEST_METHOD"], path, body)
+        return super().open(*args, headers=headers, **kwargs)
+
+
 @pytest.fixture
 def client(app):
+    app.test_client_class = SignedClient
     return app.test_client()
+
+
+@pytest.fixture
+def unsigned_client(app):
+    return FlaskClient(app)
 
 
 @pytest.fixture(autouse=True)
@@ -404,3 +435,45 @@ def test_startup_crash_monitor_marks_stale_running_job_crashed(client, monkeypat
             break
         time.sleep(0.2)
     assert status == "crashed"
+
+
+# ---------------------------------------------------------------------- #
+# Every /api/v1 endpoint needs the HMAC coordinator signature
+# ---------------------------------------------------------------------- #
+@pytest.mark.parametrize("method,path", [
+    ("get", "/scan/list"), ("get", "/scan/seed-completed-few/status"),
+    ("get", "/results/seed-completed-few/result"), ("post", "/scan/start"),
+    ("post", "/maintenance/cleanup"), ("post", "/maintenance/detect-crashed"),
+    ("delete", "/scan/seed-completed-few/remove"), ("get", "/health"),
+])
+def test_unsigned_requests_are_rejected(unsigned_client, method, path):
+    response = getattr(unsigned_client, method)(API + path)
+    assert response.status_code == 401
+    assert response.json["success"] is False
+    assert rows_for_scan("seed-completed-few") == 3
+
+
+def test_wrong_key_stale_timestamp_and_changed_body_are_rejected(unsigned_client):
+    now = str(int(time.time()))
+    path = f"{API}/maintenance/cleanup"
+    body = b'{"daysOld": 1}'
+    good = sign(os.environ["COORDINATOR_KEY"], now, "POST", path, body)
+    wrong_key = sign("not-the-key", now, "POST", path, body)
+    old = str(int(time.time()) - 600)
+    stale = sign(os.environ["COORDINATOR_KEY"], old, "POST", path, body)
+
+    for timestamp, signature, sent_body in ((now, wrong_key, body), (old, stale, body),
+                                            (now, good, b'{"daysOld": 0}')):
+        response = unsigned_client.post(path, data=sent_body, content_type="application/json",
+                                        headers={TIMESTAMP_HEADER: timestamp, SIGNATURE_HEADER: signature})
+        assert response.status_code == 401
+
+    response = unsigned_client.post(path, data=body, content_type="application/json",
+                                    headers={TIMESTAMP_HEADER: now, SIGNATURE_HEADER: good})
+    assert response.status_code == 200
+
+
+def test_liveness_and_docs_stay_open(unsigned_client):
+    assert unsigned_client.get("/health").status_code == 200
+    assert unsigned_client.get("/docs/").status_code == 200
+    assert unsigned_client.get(f"{API}/swagger.json").status_code == 200

@@ -28,6 +28,7 @@ os.environ.update({
     "LOKI_ENABLED": "false",
     "LOG_LEVEL": "WARNING",
     "CONFIG_PASSWORD": "test-config-password",
+    "COORDINATOR_KEY": "test-coordinator-key",
     "DB_HOST": TEST_DB["host"],
     "DB_PORT": TEST_DB["port"],
     "DB_USER": TEST_DB["user"],

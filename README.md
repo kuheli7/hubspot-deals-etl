@@ -41,7 +41,7 @@ cp .env.example .env          # .env is git-ignored
 python -m venv .venv && .venv/Scripts/activate      # Windows; use .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt pytest
 ```
-Choose a mode in `.env`:
+In `.env`, set your own values for the two required secrets, `CONFIG_PASSWORD` and `COORDINATOR_KEY` (the service will not start without them). Then choose a mode:
 - **Local HubSpot mock** (what the test results use): uncomment the lines in the "Local HubSpot API mock" section (`COMPOSE_FILE`, `HUBSPOT_API_BASE_URL=http://localhost:5299`, mock token).
 - **Real HubSpot**: keep `HUBSPOT_API_BASE_URL=https://api.hubapi.com` and set `HUBSPOT_ACCESS_TOKEN=pat-...`.
 
@@ -64,16 +64,16 @@ python scripts/create_test_deals.py     # POST /crm/v3/objects/deals x5, IDs -> 
 ```
 
 ### 4. Run an extraction
+Every `/api/v1` request must be HMAC-signed with `COORDINATOR_KEY` ([how](docs/api-documentation.md#-authentication)). `scripts/signed_request.py` signs for you:
 ```bash
-curl -X POST http://localhost:5200/api/v1/scan/start \
-  -H "Content-Type: application/json" \
-  -d '{"config": {"scanId": "deals-001", "organizationId": "org-12345", "type": ["deal"],
-       "auth": {"accessToken": "pat-mock-test-account-deals"}}}'
+# scan.json: {"config": {"scanId": "deals-001", "organizationId": "org-12345", "type": ["deal"],
+#                        "auth": {"accessToken": "pat-mock-test-account-deals"}}}
+python scripts/signed_request.py POST /scan/start @scan.json
 
-curl http://localhost:5200/api/v1/scan/deals-001/status
-curl "http://localhost:5200/api/v1/results/deals-001/result?tableName=deals&limit=100"
+python scripts/signed_request.py GET /scan/deals-001/status
+python scripts/signed_request.py GET "/results/deals-001/result?tableName=deals&limit=100"
 ```
-With real HubSpot, use your own `pat-...` token.
+With real HubSpot, use your own `pat-...` token. An unsigned request gets `401`.
 
 ### 5. Inspect the database
 ```bash
@@ -81,7 +81,7 @@ docker-compose exec postgres_dev psql -U postgres -d hubspot_deals_data_dev \
   -c "SELECT id, dealname, amount, dealstage, closedate FROM hubspot_deals_org_12345.deals"
 ```
 
-Open **http://localhost:5200/docs/** for the interactive API documentation.
+Open **http://localhost:5200/docs/** for the API documentation (it can't sign requests, so call the API with the script above).
 
 ## HubSpot setup
 1. Create a free account at [developers.hubspot.com](https://developers.hubspot.com/) and create a **test account** from the developer portal.
@@ -134,6 +134,7 @@ All settings are environment variables (see [`.env.example`](.env.example)); `do
 | `HUBSPOT_CHECKPOINT_INTERVAL_PAGES` | `10` | Pages per loaded + checkpointed batch |
 | `HUBSPOT_PAGE_DELAY_SECONDS` | `0` | Testing aid: delay between pages to make pause timing deterministic |
 | `CONFIG_PASSWORD` | **required** | Key for encrypting stored tokens. The service refuses to start without it |
+| `COORDINATOR_KEY` | **required** | HMAC key every `/api/v1` request must be signed with. The service refuses to start without it |
 | `HUBSPOT_ACCESS_TOKEN` | - | Used only by `scripts/`; the service receives tokens per request |
 
 Per-scan overrides: `filters.pageSize`, `filters.checkpointInterval`, `filters.properties`, `filters.archived`.

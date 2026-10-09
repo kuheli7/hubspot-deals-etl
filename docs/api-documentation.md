@@ -60,9 +60,39 @@ pending → running ──────────────► completed
 
 ## 🔐 Authentication
 
-The service API itself does not authenticate callers. It is meant to run on an internal network or behind an API gateway, which should add caller authentication in production.
+### Caller authentication (HMAC coordinator key)
 
-**HubSpot credentials** are supplied per scan in the request body:
+Every request under `/api/v1` must be signed with the shared coordinator key (`COORDINATOR_KEY`, required at startup). Only `GET /health`, `GET /docs/` and `GET /api/v1/swagger.json` are open.
+
+| Header | Value |
+|---|---|
+| `X-Coordinator-Timestamp` | current unix time in seconds |
+| `X-Coordinator-Signature` | hex HMAC-SHA256, keyed with `COORDINATOR_KEY`, of `"<timestamp>
+<METHOD>
+<path?query>
+"` followed by the raw request body |
+
+- `<path?query>` is the path from `/api/v1` on, plus the query string if there is one, e.g. `/api/v1/scan/list?limit=5`.
+- Requests whose timestamp is more than 5 minutes off are rejected, so a captured request cannot be replayed later.
+- A missing, wrong or expired signature returns `401`:
+  ```json
+  { "success": false, "message": "Invalid request signature", "error": "Unauthorized" }
+  ```
+
+```python
+import hashlib, hmac, time
+timestamp = str(int(time.time()))
+message = f"{timestamp}
+GET
+/api/v1/scan/list
+".encode() + b""
+signature = hmac.new(COORDINATOR_KEY.encode(), message, hashlib.sha256).hexdigest()
+```
+`coordinator_auth.CoordinatorAuth` does this for `requests` (`requests.get(url, auth=CoordinatorAuth(key))`), and `python scripts/signed_request.py GET /scan/list` sends a signed request from the command line. The Swagger UI cannot sign requests, so use it to read the API, not to call it.
+
+### HubSpot credentials
+
+HubSpot credentials are supplied per scan in the request body:
 
 ### Required Credentials
 | Field | Description |
@@ -72,8 +102,8 @@ The service API itself does not authenticate callers. It is meant to run on an i
 ### Required Permissions (HubSpot scopes)
 - `crm.objects.deals.read`
 
-### Authentication Headers
-None are required by the service. The token is sent to HubSpot as `Authorization: Bearer <token>`, stored encrypted, and never echoed back: `config.auth` is always shown as `"***redacted***"`.
+### What happens to the token
+The token is sent to HubSpot as `Authorization: Bearer <token>`, stored encrypted, and never echoed back: `config.auth` is always shown as `"***redacted***"`.
 
 ---
 
@@ -731,7 +761,7 @@ HubSpot rate limit exceeded (429): You have reached your daily limit.
 | HTTP | Meaning | Typical cause |
 |---|---|---|
 | `400` | Bad request | invalid JSON, missing/invalid field, unsupported `type`, unsafe IDs, limit out of range |
-| `401` | HubSpot rejected token | wrong / revoked token (credential endpoint) |
+| `401` | Unauthorized | missing / invalid `X-Coordinator-Signature`, or HubSpot rejected the token (credential endpoint) |
 | `403` | Missing HubSpot scope | private app lacks `crm.objects.deals.read` |
 | `404` | Not found | unknown `scanId` |
 | `409` | Conflict | duplicate `scanId`, results of an unfinished scan, cancel/resume in the wrong state |
@@ -743,6 +773,8 @@ HubSpot rate limit exceeded (429): You have reached your daily limit.
 ---
 
 ## 📚 Examples
+
+Every `/api/v1` call needs the [signature headers](#-authentication). The curl and PowerShell examples leave them out to stay readable; to run them by hand, use `python scripts/signed_request.py <METHOD> <path> [body | @file.json]`, which signs the request with `COORDINATOR_KEY` from `.env`. The Python examples sign with `CoordinatorAuth`.
 
 ### Complete Extraction Workflow (curl)
 
@@ -817,11 +849,14 @@ Invoke-RestMethod "http://localhost:5200/api/v1/scan/hubspot-deals-scan-001/stat
 ```python
 import os
 import requests
+from coordinator_auth import CoordinatorAuth   # run from the project root
 
 BASE = "http://localhost:5200/api/v1"
+api = requests.Session()
+api.auth = CoordinatorAuth(os.environ["COORDINATOR_KEY"])   # signs every request
 scan_id = "hubspot-deals-scan-001"
 
-response = requests.post(f"{BASE}/scan/start", json={
+response = api.post(f"{BASE}/scan/start", json={
     "config": {
         "scanId": scan_id,
         "organizationId": "org-12345",
@@ -838,7 +873,7 @@ assert response.status_code == 202, response.json()
 import time
 
 while True:
-    status = requests.get(f"{BASE}/scan/{scan_id}/status").json()["data"]
+    status = api.get(f"{BASE}/scan/{scan_id}/status").json()["data"]
     print(status["status"], status["recordsExtracted"])
     if status["status"] in ("completed", "failed", "cancelled"):
         break
@@ -853,7 +888,7 @@ if status["status"] == "failed":
 def iter_deals(scan_id, page_size=100):
     offset = 0
     while True:
-        data = requests.get(f"{BASE}/results/{scan_id}/result",
+        data = api.get(f"{BASE}/results/{scan_id}/result",
                             params={"tableName": "deals", "limit": page_size, "offset": offset}).json()["data"]
         yield from data["records"]
         if not data["pagination"]["hasMore"]:
@@ -866,7 +901,7 @@ for deal in iter_deals(scan_id):
 
 #### Error Handling
 ```python
-response = requests.post(f"{BASE}/scan/start", json={"config": {"scanId": "bad id!"}})
+response = api.post(f"{BASE}/scan/start", json={"config": {"scanId": "bad id!"}})
 if response.status_code == 400:
     print(response.json()["validation_errors"])
 elif response.status_code == 409:
