@@ -6,14 +6,14 @@ The test approach follows the GreenTree **[API Test Workflow guideline (TEST-GUI
 
 | Suite | Guideline test type | How to run | Needs | Latest result |
 |---|---|---|---|---|
-| `tests/test_hubspot_api_service.py`, `tests/test_data_source.py` | Unit (mocked HTTP) | `pytest` | nothing | 22 passed |
+| `tests/test_hubspot_api_service.py`, `tests/test_data_source.py`, `tests/test_config.py` | Unit (mocked HTTP, startup checks) | `pytest` | nothing | 27 passed |
 | `tests/test_mock_hubspot_contract.py` | Contract tests that keep the HubSpot mock faithful | `pytest` | nothing | 11 passed |
-| `tests/test_seeded_api.py` | **Seeded Data Tests** (§3) and edge cases (§7) | `pytest` | PostgreSQL on `localhost:5432` (skipped otherwise) | 50 passed |
+| `tests/test_seeded_api.py` | **Seeded Data Tests** (§3) and edge cases (§7) | `pytest` | PostgreSQL on `localhost:5432` (skipped otherwise) | 63 passed |
 | `scripts/run_extraction_test.py` | **Real Extraction Tests** (§4) and edge cases (§7) | `python scripts/run_extraction_test.py --restart-test --crash-test` | running stack plus HubSpot token (or the mock) | 45/45 checks |
 | `scripts/run_mock_resilience_test.py` | Edge cases needing a misbehaving HubSpot (§7: volume, rate limits, downtime) | `python scripts/run_mock_resilience_test.py` | running stack with the HubSpot mock | 9/9 checks |
 | `.github/workflows/tests.yml` | CI (§8.10) | every push and pull request | GitHub Actions with a PostgreSQL service | - |
 
-`pytest` runs all four pytest files: **83 tests**.
+`pytest` runs all five pytest files: **101 tests**.
 
 ### Test data (§8.4)
 - **Seeded:** a dedicated database, `hubspot_deals_test`, is dropped and recreated per session and reseeded before every test (data isolation). It holds jobs in every state (`pending`, `running`, `completed` ×3, `cancelled`, `failed`, plus a second tenant) and deal rows for 0, 3 and 250 records.
@@ -97,4 +97,4 @@ Additional extraction checks: pause/resume from a checkpoint, crash recovery aft
 - **State and cleanup (§8.7):** chained requests use the returned `scanId`; seeded tests reseed per test; end-to-end scans use unique run IDs and tenants; the remove step cleans up; HubSpot is mocked for unit and contract tests.
 - **Observability (§8.8):** JSON service logs (`test-results/logs/`), per-check details in `test_run_summary.md`, mock request statistics in `resilience_test.json`.
 - **Maintainability (§8.9):** descriptive test names, this mapping, tests versioned with the code.
-- **CI (§8.10):** `.github/workflows/tests.yml` runs the 83 pytest tests against PostgreSQL and checks that the Docker stack builds and becomes healthy.
+- **CI (§8.10):** `.github/workflows/tests.yml` runs the 101 pytest tests against PostgreSQL and checks that the Docker stack builds and becomes healthy.

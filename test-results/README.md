@@ -5,7 +5,7 @@ The files in this folder are the output of the test runs on 2026-10-08/09 (UTC).
 ## Summary
 | Suite | Result | Evidence |
 |---|---|---|
-| `pytest`: unit (22), mock contract (11), **seeded data** (50, guideline §3) | **83 / 83 passed** | [`pytest_results.txt`](pytest_results.txt) |
+| `pytest`: unit (27), mock contract (11), **seeded data** (63, guideline §3) | **101 / 101 passed** | [`pytest_results.txt`](pytest_results.txt) |
 | End-to-end extraction (`scripts/run_extraction_test.py --restart-test --crash-test --mock-latency-ms 1000`) | **45 / 45 checks passed** | [`test_run_summary.md`](test_run_summary.md) |
 | Resilience (`scripts/run_mock_resilience_test.py`) | **9 / 9 checks passed** | [`resilience_test.md`](resilience_test.md) |
 

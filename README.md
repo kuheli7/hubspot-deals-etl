@@ -93,7 +93,7 @@ With the mock, the equivalent token `pat-mock-test-account-deals` already has bo
 
 ## Testing
 ```bash
-pytest                                        # 83 tests: unit, mock contract, seeded data (PostgreSQL)
+pytest                                        # 101 tests: unit, mock contract, seeded data (PostgreSQL)
 python scripts/run_extraction_test.py --restart-test --crash-test [--mock-latency-ms 1000]
 python scripts/run_mock_resilience_test.py    # mock only: volume, rate limits, outages, scopes, archived
 python scripts/export_deal_properties.py      # deal property list -> docs/deal-properties.md
@@ -119,7 +119,7 @@ python scripts/export_deal_properties.py      # deal property list -> docs/deal-
 
 Testing follows the GreenTree [API test guideline (TEST-GUIDELINES-V1)](https://github.com/greentreegroup/policy/blob/main/TEST-GUIDELINES-V1.md). [`docs/testing.md`](docs/testing.md) maps every guideline section (seeded data tests, real extraction tests, common assertions, edge cases, CI) to the test that covers it. The seeded-data tests use a separate, freshly created `hubspot_deals_test` database on the same PostgreSQL. GitHub Actions runs the pytest suite and a Docker build on every push.
 
-Latest results: **83/83 pytest tests, 45/45 end-to-end checks, 9/9 resilience checks**. See [`test-results/`](test-results/README.md).
+Latest results: **101/101 pytest tests, 45/45 end-to-end checks, 9/9 resilience checks**. See [`test-results/`](test-results/README.md).
 
 ## Configuration
 All settings are environment variables (see [`.env.example`](.env.example)); `docker-compose.yml` reads the HubSpot ones from `.env`.
