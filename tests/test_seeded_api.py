@@ -6,6 +6,7 @@ extracted deal rows (0, 3 and 250 records). The service API is then exercised
 in-process with Flask's test client, with no HubSpot dependency. Every test
 reseeds, so tests are independent of each other.
 """
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
@@ -378,3 +379,28 @@ def test_start_with_existing_scan_id_conflicts(client):
     assert "already exists" in response.json["message"]
     # the seeded job is untouched
     assert client.get(f"{API}/scan/seed-completed-few/status").json["data"]["status"] == "completed"
+
+
+# ---------------------------------------------------------------------- #
+# Crash detection runs on its own at startup
+# ---------------------------------------------------------------------- #
+def test_startup_crash_monitor_marks_stale_running_job_crashed(client, monkeypatch):
+    import app as app_module
+
+    conn = connect()
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("""UPDATE jobs SET "lastHeartbeat" = %s WHERE id = 'seed-running'""",
+                    (NOW - timedelta(minutes=30),))
+    conn.close()
+
+    monkeypatch.setattr(app_module, "_crash_monitor_started", False)
+    app_module.start_crash_monitor(10)
+
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        status = client.get(f"{API}/scan/seed-running/status").json["data"]["status"]
+        if status == "crashed":
+            break
+        time.sleep(0.2)
+    assert status == "crashed"

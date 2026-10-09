@@ -2,12 +2,41 @@ from flask import Flask
 from flask_cors import CORS
 import logging
 import os
+import threading
+import time
 from datetime import datetime, timezone
 
 from config import get_config
 from api.routes import create_api
 from loki_logger import configure_app_logging
 from models.database import initialize_database, check_database_health
+from services.job_service import JobService
+
+_crash_monitor_started = False
+
+
+def start_crash_monitor(timeout_minutes: int):
+    """
+    Mark scans whose worker died as crashed - once at startup, then every
+    timeout_minutes - so it no longer depends on someone calling
+    POST /maintenance/detect-crashed. Only jobs whose heartbeat is older than
+    the timeout are touched, so scans still running in another worker are safe.
+    """
+    global _crash_monitor_started
+    if _crash_monitor_started:
+        return
+    _crash_monitor_started = True
+
+    def run():
+        while True:
+            try:
+                JobService().detect_crashed_jobs(timeout_minutes)
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Crash detection failed: {e}")
+            time.sleep(timeout_minutes * 60)
+
+    threading.Thread(target=run, name="crash-detection", daemon=True).start()
+
 
 def create_app(config_name: str = None) -> Flask:
     """Application factory function"""
@@ -42,6 +71,10 @@ def create_app(config_name: str = None) -> Flask:
     api = create_api()
     # Initialize Flask-RESTX API
     api.init_app(app)
+
+    # Tests seed jobs in exact states, so they start the monitor themselves
+    if not config.TESTING:
+        start_crash_monitor(config.get_api_config()['crash_detection_timeout'])
     
     # Root route
     @app.route('/')

@@ -42,7 +42,7 @@ pending → running ──────────────► completed
              │  └──── paused ◄────┘ (POST /pause, then POST /resume → resuming → running)
              ├──► failed      (HubSpot / database error; errorMessage set) → resume once HubSpot recovers
              ├──► cancelled   (POST /cancel)
-             └──► crashed     (no heartbeat; POST /maintenance/detect-crashed) → resume
+             └──► crashed     (no heartbeat; checked at startup and every 10 min) → resume
 ```
 
 | Status | Meaning |
@@ -667,7 +667,7 @@ Removes finished job records and their checkpoints older than `daysOld` (1-365).
 ### 6. Detect Crashed Scans
 **`POST /api/v1/maintenance/detect-crashed?timeoutMinutes=10`**
 
-Marks `running` scans whose heartbeat is older than `timeoutMinutes` (1-60) as `crashed`, so they can be resumed.
+Marks `running` scans whose heartbeat is older than `timeoutMinutes` (1-60) as `crashed`, so they can be resumed. The service already runs this check by itself at startup and then every 10 minutes; this endpoint only triggers it now or with a different timeout.
 ```json
 { "success": true, "data": { "crashedJobIds": ["hubspot-deals-scan-007"], "crashedCount": 1, "timeoutMinutes": 10 },
   "message": "Detected 1 crashed jobs" }
