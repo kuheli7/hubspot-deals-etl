@@ -230,6 +230,16 @@ def test_results_limit_validation(client):
     assert client.get(f"{API}/results/seed-completed-many/result?offset=-1").status_code == 400
 
 
+@pytest.mark.parametrize("table_name", [
+    f'deals"; DROP TABLE "{SCHEMA}"."deals"; --',
+    "no_such_table",
+])
+def test_results_only_accept_tables_in_the_scan_schema(client, table_name):
+    response = client.get(f"{API}/results/seed-completed-few/result?tableName={quote(table_name)}")
+    assert response.status_code == 404
+    assert rows_for_scan("seed-completed-few") == 3
+
+
 # ---------------------------------------------------------------------- #
 # Step 4 - list all jobs, pagination and filtering
 # ---------------------------------------------------------------------- #

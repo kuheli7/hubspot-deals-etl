@@ -108,6 +108,12 @@ class DatabaseService:
             )
             
             with pipeline.sql_client() as client:
+                # table_name comes from the request and is placed in the SQL text,
+                # so only accept tables that really exist in this scan's schema
+                available_tables = self.get_available_tables(client, dataset_name)
+                if table_name not in available_tables:
+                    return {"success": False, "message": f"Table not found: {table_name}"}
+
                 # Get column names
                 columns = self.get_table_columns(client, dataset_name, table_name) or []
 
@@ -121,10 +127,7 @@ class DatabaseService:
                 
                 # Get paginated data
                 rows = self.execute_data_query(client, queries['data'], columns, *params)
-                
-                # Get available tables
-                available_tables = self.get_available_tables(client, dataset_name)
-                
+
                 return {
                     "success": True,
                     "data": {

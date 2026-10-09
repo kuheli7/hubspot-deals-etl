@@ -513,7 +513,7 @@ All figures respect the `organizationId` filter. `extraction_time` is measured o
 #### Query Parameters
 | Name | Default | Rules |
 |---|---|---|
-| `tableName` | `deals` | table in the tenant schema |
+| `tableName` | `deals` | must be an existing table in the scan's tenant schema, otherwise `404` |
 | `limit` | 100 | 1-500 |
 | `offset` | 0 | ≥ 0 |
 
