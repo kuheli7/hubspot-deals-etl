@@ -463,7 +463,7 @@ def test_wrong_key_stale_timestamp_and_changed_body_are_rejected(unsigned_client
     stale = sign(os.environ["COORDINATOR_KEY"], old, "POST", path, body)
 
     for timestamp, signature, sent_body in ((now, wrong_key, body), (old, stale, body),
-                                            (now, good, b'{"daysOld": 0}')):
+                                            (now, good, b'{"daysOld": 0}'), (now, "é" * 64, body)):
         response = unsigned_client.post(path, data=sent_body, content_type="application/json",
                                         headers={TIMESTAMP_HEADER: timestamp, SIGNATURE_HEADER: signature})
         assert response.status_code == 401

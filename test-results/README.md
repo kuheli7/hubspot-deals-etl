@@ -12,7 +12,7 @@ The files in this folder are the output of the test runs on 2026-10-08/09 (UTC).
 ## Key outcomes
 | Requirement | Result |
 |---|---|
-| Docker services start without errors | 4 containers healthy ([`docker_compose_ps.txt`](docker_compose_ps.txt)); also verified from a fresh clone without `.env` |
+| Docker services start without errors | 4 containers healthy ([`docker_compose_ps.txt`](docker_compose_ps.txt)); also verified from a fresh clone (now run `cp .env.example .env` first: the stack requires `CONFIG_PASSWORD` and `COORDINATOR_KEY`) |
 | Health check | `GET /health` → 200 `healthy` ([`health_check.json`](health_check.json)) |
 | API documentation | Swagger UI at `/docs/` → 200; OpenAPI lists 24 paths |
 | 5 test deals created | IDs 40100000001–40100000005 ([`test_deals_created.json`](test_deals_created.json)) |

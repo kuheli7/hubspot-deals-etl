@@ -55,7 +55,8 @@ def verify_request(key: str, prefix: str = "/api/v1"):
     if request.query_string:
         path += "?" + request.query_string.decode()
     expected = sign(key, timestamp, request.method, path, request.get_data())
-    if not hmac.compare_digest(expected, signature.lower()):
+    # compare bytes: compare_digest raises on non-ASCII str, which would be a 500
+    if not hmac.compare_digest(expected.encode(), signature.lower().encode()):
         return unauthorized("Invalid request signature")
     return None
 
