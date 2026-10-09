@@ -123,12 +123,30 @@ def test_429_daily_limit_fails_immediately():
     assert len(session.calls) == 1
 
 
-def test_429_gives_up_after_max_retries():
-    responses = [make_response(429, {"message": "slow down"}) for _ in range(4)]
+def test_429_waits_do_not_use_up_retries():
+    responses = [make_response(429, {"message": "slow down"}) for _ in range(5)] + [page([1])]
     api, session = client(responses, max_retries=3)
+    data = api.get_deals("pat-na1-test-token")
+    assert data["results"][0]["id"] == "1"
+    assert len(session.calls) == 6
+
+
+def test_5xx_still_gives_up_after_max_retries_when_mixed_with_429s():
+    rate_limited = make_response(429, {"message": "slow down"})
+    down = make_response(503, {"message": "down"})
+    api, session = client([rate_limited, down, rate_limited, down, down, rate_limited, down], max_retries=3)
+    with pytest.raises(HubSpotServerError):
+        api.get_deals("pat-na1-test-token")
+    assert len(session.calls) == 7
+
+
+def test_429_gives_up_after_max_rate_limit_waits(no_sleep):
+    responses = [make_response(429, {"message": "slow down"}) for _ in range(4)]
+    api, session = client(responses, max_retries=3, max_rate_limit_waits=3)
     with pytest.raises(HubSpotRateLimitError):
         api.get_deals("pat-na1-test-token")
     assert len(session.calls) == 4
+    assert all(delay <= 10.0 for delay in no_sleep)
 
 
 def test_5xx_and_network_errors_are_retried():

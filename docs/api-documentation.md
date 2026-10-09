@@ -717,7 +717,7 @@ Marks `running` scans whose heartbeat is older than `timeoutMinutes` (1-60) as `
 ```
 
 #### Rate Limit Errors (429)
-HubSpot `429` responses are retried inside the scan (see [api-integration.md](api-integration.md#-rate-limits)). A scan only fails on a daily-limit `429` or after the retries are exhausted, with `errorMessage` such as:
+HubSpot `429` responses are retried inside the scan (see [api-integration.md](api-integration.md#-rate-limits)). Waiting out a `429` does not count as one of the 3 retries. A scan only fails on a daily-limit `429` or if HubSpot is still rate limiting after 10 waits, with `errorMessage` such as:
 ```
 HubSpot rate limit exceeded (429): You have reached your daily limit.
 ```

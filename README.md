@@ -129,7 +129,7 @@ All settings are environment variables (see [`.env.example`](.env.example)); `do
 | `HUBSPOT_API_BASE_URL` | `https://api.hubapi.com` | HubSpot API host |
 | `HUBSPOT_API_TIMEOUT` | `30` | Request timeout (s) |
 | `HUBSPOT_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_SECONDS` | `150` / `10` | Client-side burst limit (use 100 on Free/Starter) |
-| `HUBSPOT_RETRY_ATTEMPTS` | `3` | Retries for 429 / 5xx / network errors |
+| `HUBSPOT_RETRY_ATTEMPTS` | `3` | Retries for 5xx / network errors (429 waits are not counted) |
 | `HUBSPOT_PAGE_SIZE` | `100` | Deals per request (max 100) |
 | `HUBSPOT_CHECKPOINT_INTERVAL_PAGES` | `10` | Pages per loaded + checkpointed batch |
 | `HUBSPOT_PAGE_DELAY_SECONDS` | `0` | Testing aid: delay between pages to make pause timing deterministic |

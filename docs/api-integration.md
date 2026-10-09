@@ -275,7 +275,7 @@ The assignment specifies **150 requests / 10 seconds**, which is the service def
 ### **How the service stays within the limits**
 1. **Client-side sliding window** (`RateLimiter`): at most 150 requests in any rolling 10 s per scan. Calls block until a slot frees up.
 2. **Header guard**: if `X-HubSpot-RateLimit-Remaining` drops to 1 (e.g. other apps share the quota) the client waits one interval before the next call.
-3. **429 retry**: waits `Retry-After` if present, otherwise `X-HubSpot-RateLimit-Interval-Milliseconds`, otherwise exponential back-off (`1s, 2s, 4s`), up to `HUBSPOT_RETRY_ATTEMPTS` (3) retries.
+3. **429 wait**: waits `Retry-After` if present, otherwise `X-HubSpot-RateLimit-Interval-Milliseconds`, otherwise exponential back-off capped at 10 s. Rate-limit waits do **not** use up the `HUBSPOT_RETRY_ATTEMPTS` (3) retries; they have their own limit of 10 waits per request.
 4. **Daily limit**: a `DAILY` 429 is not retried (waiting seconds cannot help). The job fails with the HubSpot message and can be restarted the next day.
 5. Every response's rate-limit headers are stored in the scan metadata (`metadata.rate_limit`) for monitoring.
 
@@ -289,7 +289,7 @@ The assignment specifies **150 requests / 10 seconds**, which is the service def
 | `401 Unauthorized` (missing, invalid, revoked token) | `HubSpotAuthenticationError` | No | `failed` at credential validation: *"HubSpot rejected the access token (401): ..."* |
 | `403 Forbidden` (missing scope) | `HubSpotPermissionError` | No | `failed`: *"... deal extraction needs crm.objects.deals.read (403)"* |
 | `404 Not Found` | `HubSpotNotFoundError` | No | `failed` (only possible for single-deal reads) |
-| `429 TEN_SECONDLY_ROLLING` | `HubSpotRateLimitError` | Yes, up to 3 times | Continues; fails only if still limited after retries |
+| `429 TEN_SECONDLY_ROLLING` | `HubSpotRateLimitError` | Yes, waits up to 10 times (not counted as retries) | Continues; fails only if still limited after 10 waits |
 | `429 DAILY` | `HubSpotRateLimitError` | No | `failed` with the daily-limit message |
 | `5xx` | `HubSpotServerError` | Yes, exponential back-off | Continues; fails after 3 retries, then resumable from the last checkpoint with `POST /scan/{id}/resume` |
 | Connection error / timeout (`HUBSPOT_API_TIMEOUT`=30 s) | `HubSpotServerError` | Yes, exponential back-off | Continues; fails after 3 retries |

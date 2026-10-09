@@ -6,7 +6,8 @@ Wraps the HubSpot CRM v3 deals endpoints with:
 - cursor-based pagination (``paging.next.after``)
 - client-side rate limiting (default 150 requests per rolling 10 seconds)
   plus adaptive back-off driven by HubSpot's ``X-HubSpot-RateLimit-*`` headers
-- retries with exponential back-off for 429, 5xx and network errors
+- retries with exponential back-off for 5xx and network errors; 429s are
+  waited out separately and do not use up those retries
 - typed exceptions for the common HubSpot error responses
 
 The access token is never logged and never stored on the shared session, so one
@@ -152,6 +153,7 @@ class HubSpotAPIService:
         window_seconds: float = 10.0,
         max_retries: int = 3,
         backoff_seconds: float = 1.0,
+        max_rate_limit_waits: int = 10,
         session: Optional[requests.Session] = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -161,6 +163,7 @@ class HubSpotAPIService:
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_seconds = backoff_seconds
+        self.max_rate_limit_waits = max_rate_limit_waits
         self.rate_limiter = RateLimiter(max_requests_per_window, window_seconds)
         self.logger = get_logger(__name__)
         self.session = session or requests.Session()
@@ -237,10 +240,13 @@ class HubSpotAPIService:
         """
         url = f"{self.base_url}{path}"
         headers = self._auth_headers(access_token)
-        attempt = 0
+        # Network errors and 5xx use up the retries; waiting out a 429 does not,
+        # it has its own (larger) limit so a stuck rate limit cannot loop forever
+        retries = 0
+        rate_limit_waits = 0
 
         while True:
-            attempt += 1
+            attempt = retries + rate_limit_waits + 1
             waited = self.rate_limiter.acquire()
             if waited > 0:
                 self.logger.debug(
@@ -259,8 +265,9 @@ class HubSpotAPIService:
                     timeout=self.timeout,
                 )
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                if attempt <= self.max_retries:
-                    delay = self._backoff_delay(attempt)
+                if retries < self.max_retries:
+                    retries += 1
+                    delay = self._backoff_delay(retries)
                     self.logger.warning(
                         "Network error calling HubSpot, retrying",
                         extra={
@@ -299,13 +306,15 @@ class HubSpotAPIService:
                 if error.category == "DAILY" or "daily" in error.message.lower():
                     # Waiting a few seconds will not help with the daily quota
                     raise error
-                if attempt <= self.max_retries:
-                    delay = self._retry_after_seconds(response, attempt)
+                if rate_limit_waits < self.max_rate_limit_waits:
+                    rate_limit_waits += 1
+                    delay = self._retry_after_seconds(response, rate_limit_waits)
                     self.logger.warning(
                         "HubSpot rate limit hit, backing off",
                         extra={
                             "operation": operation,
                             "attempt": attempt,
+                            "rate_limit_waits": rate_limit_waits,
                             "retry_in_seconds": delay,
                             "policy": error.category,
                         },
@@ -314,8 +323,9 @@ class HubSpotAPIService:
                     continue
                 raise error
 
-            if response.status_code >= 500 and attempt <= self.max_retries:
-                delay = self._backoff_delay(attempt)
+            if response.status_code >= 500 and retries < self.max_retries:
+                retries += 1
+                delay = self._backoff_delay(retries)
                 self.logger.warning(
                     "HubSpot server error, retrying",
                     extra={
@@ -357,7 +367,8 @@ class HubSpotAPIService:
                 return max(float(interval_ms) / 1000.0, 1.0)
             except ValueError:
                 pass
-        return self._backoff_delay(attempt)
+        # HubSpot's burst window is 10 s, so waiting longer than that never helps
+        return min(self._backoff_delay(attempt), 10.0)
 
     def _record_rate_limit_headers(self, response: requests.Response) -> None:
         header_map = {
