@@ -27,6 +27,7 @@ os.environ.update({
     "FLASK_ENV": "testing",
     "LOKI_ENABLED": "false",
     "LOG_LEVEL": "WARNING",
+    "CONFIG_PASSWORD": "test-config-password",
     "DB_HOST": TEST_DB["host"],
     "DB_PORT": TEST_DB["port"],
     "DB_USER": TEST_DB["user"],

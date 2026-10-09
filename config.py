@@ -15,7 +15,8 @@ class Config:
     
     # Encryption settings
     ENCRYPTION_ENABLED = os.environ.get('ENCRYPTION_ENABLED', 'True').lower() == 'true'
-    ENCRYPTION_PASSWORD = os.environ.get('CONFIG_PASSWORD', 'default-password-change-in-production')
+    # No default: a known fallback key would make the stored tokens readable by anyone
+    ENCRYPTION_PASSWORD = os.environ.get('CONFIG_PASSWORD')
     ENCRYPTION_ALGORITHM = os.environ.get('CONFIG_ENCRYPTION_ALGORITHM', 'SHA512')
 
     # Server settings
@@ -119,6 +120,15 @@ class Config:
     API_DOCS_ENABLED = True
     API_PREFIX = '/api/v1'
     
+    @classmethod
+    def validate_required_settings(cls):
+        """Fail at startup instead of running with an unsafe fallback"""
+        if cls.ENCRYPTION_ENABLED and not cls.ENCRYPTION_PASSWORD:
+            raise ValueError(
+                "CONFIG_PASSWORD is not set. It is the key that encrypts the HubSpot "
+                "tokens stored with each scan - set it in the environment or in .env."
+            )
+
     @classmethod
     def get_database_url(cls) -> str:
         """Get the PostgreSQL database URL for SQLAlchemy/DLT"""

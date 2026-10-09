@@ -45,6 +45,8 @@ jobs:
   docker:
     name: Docker images build and the stack starts
     runs-on: ubuntu-latest
+    env:
+      CONFIG_PASSWORD: ci-config-password
     steps:
       - uses: actions/checkout@v4
 

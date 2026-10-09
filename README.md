@@ -133,7 +133,7 @@ All settings are environment variables (see [`.env.example`](.env.example)); `do
 | `HUBSPOT_PAGE_SIZE` | `100` | Deals per request (max 100) |
 | `HUBSPOT_CHECKPOINT_INTERVAL_PAGES` | `10` | Pages per loaded + checkpointed batch |
 | `HUBSPOT_PAGE_DELAY_SECONDS` | `0` | Testing aid: delay between pages to make pause timing deterministic |
-| `CONFIG_PASSWORD` | dev value | Key for encrypting stored tokens - change outside development |
+| `CONFIG_PASSWORD` | **required** | Key for encrypting stored tokens. The service refuses to start without it |
 | `HUBSPOT_ACCESS_TOKEN` | - | Used only by `scripts/`; the service receives tokens per request |
 
 Per-scan overrides: `filters.pageSize`, `filters.checkpointInterval`, `filters.properties`, `filters.archived`.
@@ -202,7 +202,7 @@ hubspot-deals-etl/
 docker-compose --profile stage up -d postgres_stage hubspot_deals_service_stage   # port 5201
 docker-compose --profile prod  up -d postgres_prod  hubspot_deals_service_prod    # port 5202 (gunicorn)
 ```
-Production requires `SECRET_KEY` (≥ 32 chars) and `DB_PASSWORD`; set a strong `CONFIG_PASSWORD`.
+Every environment requires `CONFIG_PASSWORD` (use a strong one outside development); production also requires `SECRET_KEY` (≥ 32 chars) and `DB_PASSWORD`.
 
 ## Changes to the generated template
 Besides the HubSpot implementation, these generator-template issues were fixed:

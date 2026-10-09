@@ -17,6 +17,7 @@ def create_app(config_name: str = None) -> Flask:
     
     # Load configuration
     config = get_config(config_name)
+    config.validate_required_settings()
     app.config.from_object(config)
     
     # Setup CORS
